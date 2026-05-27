@@ -1,0 +1,11 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# IntelliJ / Android Studio (project-level)
+*.iml
+.idea/
+
+# Flutter build artifacts are ignored by gang_roll/.gitignore (nested).
