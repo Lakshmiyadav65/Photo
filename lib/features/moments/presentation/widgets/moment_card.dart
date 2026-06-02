@@ -16,11 +16,15 @@ class MomentCard extends StatelessWidget {
     super.key,
     required this.moment,
     this.onTap,
+    this.onLongPress,
     this.onInsights,
   });
 
   final Moment moment;
   final VoidCallback? onTap;
+
+  /// Long-press surfaces the leave/delete action sheet.
+  final VoidCallback? onLongPress;
   final VoidCallback? onInsights;
 
   String get _dateLabel {
@@ -32,6 +36,7 @@ class MomentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: AspectRatio(

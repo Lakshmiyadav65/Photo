@@ -42,16 +42,28 @@ class GangCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  gang.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.bricolageGrotesque(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.ink,
-                    letterSpacing: -0.3,
-                  ),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        gang.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.bricolageGrotesque(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.ink,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                    // Muted indicator.
+                    if (gang.muted) ...[
+                      const SizedBox(width: 6),
+                      const Icon(Icons.notifications_off_rounded,
+                          size: 14, color: AppTheme.muted),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(

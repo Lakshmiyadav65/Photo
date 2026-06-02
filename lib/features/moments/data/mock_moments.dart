@@ -13,57 +13,22 @@ import '../domain/moment.dart';
 /// reaching into a Riverpod scope.
 List<Moment> get mockMoments => List<Moment>.unmodifiable(_seedMoments);
 
+// Seed is intentionally a SINGLE empty moment so it's obvious when Quick Shoot
+// photos land. No mock photos (photoCount 0 → photosForMoment returns []), no
+// other members — just the user.
 final _seedMoments = <Moment>[
   Moment(
-    id: 'gang5k',
-    title: "Aarav's birthday",
-    code: 'GANG5K',
+    id: 'goa-trip-2026',
+    title: 'Goa Trip 2026',
+    code: 'GOA001',
     state: RollState.live,
-    photoCount: 14,
-    memberCount: 8,
-    vibe: 'wholesome',
-    shotsLeft: 3,
-    endsAt: DateTime.now().add(const Duration(hours: 2, minutes: 14)),
-    members: ['Aarav', 'Meera', 'Rohan', 'Sana', 'Karan', 'Priya', 'Dev', 'Isha'],
-    lastActiveAt: DateTime.now().subtract(const Duration(minutes: 18)),
-  ),
-  Moment(
-    id: 'goa204',
-    title: 'Goa weekend',
-    code: 'GOA204',
-    state: RollState.developing,
-    photoCount: 32,
-    memberCount: 6,
+    photoCount: 0,
+    memberCount: 1,
     vibe: 'cinematic',
-    endsAt: DateTime.now().add(const Duration(minutes: 12, seconds: 42)),
-    members: ['Priya', 'Aarav', 'Karan', 'Meera', 'Rohan', 'Dev'],
-    lastActiveAt: DateTime.now().subtract(const Duration(hours: 3)),
-  ),
-  Moment(
-    id: 'satn8t',
-    title: 'Saturday night out',
-    code: 'SATN8T',
-    state: RollState.developed,
-    photoCount: 27,
-    memberCount: 5,
-    vibe: 'chaotic',
-    viewCount: 142,
-    developedAt: DateTime.now().subtract(const Duration(days: 3)),
-    members: ['Rohan', 'Ananya', 'Karan', 'Meera', 'Dev'],
-    lastActiveAt: DateTime.now().subtract(const Duration(days: 3)),
-  ),
-  Moment(
-    id: 'hyd909',
-    title: 'Hyderabad rooftop',
-    code: 'HYD909',
-    state: RollState.developed,
-    photoCount: 19,
-    memberCount: 4,
-    vibe: 'soft memories',
-    viewCount: 88,
-    developedAt: DateTime.now().subtract(const Duration(days: 7)),
-    members: ['Ananya', 'Karan', 'Priya', 'Aarav'],
-    lastActiveAt: DateTime.now().subtract(const Duration(days: 7)),
+    shotsLeft: 25,
+    endsAt: DateTime.now().add(const Duration(hours: 2)),
+    members: ['You'],
+    lastActiveAt: DateTime.now(),
   ),
 ];
 

@@ -10,6 +10,7 @@ class Gang {
     required this.createdAt,
     required this.momentCount,
     this.momentCodes = const [],
+    this.muted = false,
   });
 
   final String id;
@@ -29,5 +30,21 @@ class Gang {
   /// existing moments mock so tapping opens the real Moment experience.
   final List<String> momentCodes;
 
+  /// Notifications for this gang are muted (per-user preference).
+  final bool muted;
+
   int get peopleCount => members.length;
+
+  /// First member (by convention) is the owner/host.
+  String? get hostName => members.isNotEmpty ? members.first : null;
+
+  Gang copyWith({List<String>? members, bool? muted}) => Gang(
+        id: id,
+        name: name,
+        members: members ?? this.members,
+        createdAt: createdAt,
+        momentCount: momentCount,
+        momentCodes: momentCodes,
+        muted: muted ?? this.muted,
+      );
 }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick Shoot shortcuts are added dynamically at runtime via the
+     quick_actions plugin (see camera_shortcut_store.dart), so this static
+     list is intentionally empty. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android" />

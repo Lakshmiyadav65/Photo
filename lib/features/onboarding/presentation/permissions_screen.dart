@@ -13,6 +13,7 @@ import '../../../app/theme.dart';
 import '../../../shared/widgets/app_toggle.dart';
 import '../../../shared/widgets/brand.dart';
 import '../../active_moment/data/camera_shortcut_store.dart';
+import '../../quick_shoot/presentation/shortcut_toggle_actions.dart';
 import '../data/permissions_store.dart';
 
 class PermissionsScreen extends ConsumerWidget {
@@ -23,7 +24,9 @@ class PermissionsScreen extends ConsumerWidget {
     final perms = ref.watch(permissionsProvider).value;
     final cameraGranted = perms?.cameraGranted ?? false;
     final galleryGranted = perms?.galleryGranted ?? false;
-    final shortcutOn = ref.watch(cameraShortcutProvider).value ?? true;
+    // Off by default while the async pref loads (Bug #1 fix — see profile_screen
+    // / camera_shortcut_store). Must never render ON before the user opts in.
+    final shortcutOn = ref.watch(cameraShortcutProvider).value ?? false;
     final canContinue = cameraGranted && galleryGranted;
 
     return Scaffold(
@@ -71,8 +74,7 @@ class PermissionsScreen extends ConsumerWidget {
                   const SizedBox(height: 14),
                   _ShortcutCard(
                     value: shortcutOn,
-                    onChanged: (v) =>
-                        ref.read(cameraShortcutProvider.notifier).set(v),
+                    onChanged: (v) => handleShortcutToggle(context, ref, v),
                   ),
                 ],
               ),

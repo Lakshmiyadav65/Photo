@@ -8,10 +8,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/router.dart';
 import '../../../app/theme.dart';
 import '../../../shared/widgets/brand.dart';
-import '../../active_moment/data/camera_shortcut_store.dart';
 import '../../onboarding/data/permissions_store.dart';
+import '../../quick_shoot/data/shortcut_repository.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -33,32 +34,31 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _bootstrap();
   }
 
-  /// While the brand mark holds, refresh permission statuses and then route:
-  ///   • launched via Camera shortcut + perms ready → /home (TabShell sees
-  ///     the launch flag and triggers the camera flow on first frame)
-  ///   • returning user with permissions still granted → /home
-  ///   • returning user with revoked perms → /permissions (re-prompt)
-  ///   • first run → /onboarding
+  /// Route by launch state:
+  ///   • Pinned-shortcut launch ALWAYS wins → straight to the camera, no brand
+  ///     hold, bypassing onboarding/dashboard.
+  ///   • Else hold the brand mark briefly, then route ONCE on the persisted
+  ///     onboarding flag — a returning (onboarded) user never sees onboarding
+  ///     again, even if a permission was later revoked.
   Future<void> _bootstrap() async {
-    // Refresh first so a revocation made through device Settings is caught.
+    // Consumed once natively; the warm path is handled in app.dart.
+    final shortcutMoment = await const ShortcutRepository().initialMoment();
     await ref.read(permissionsProvider.notifier).refresh();
-    await Future<void>.delayed(const Duration(milliseconds: 1600));
     if (!mounted) return;
-    final perms = ref.read(permissionsProvider).value;
-    // Shortcut launch always wants to land in the camera flow — but only if
-    // perms are in order. Otherwise fall through to the normal routing.
-    final viaShortcut = ref.read(cameraShortcutLaunchProvider);
-    if (viaShortcut && perms != null && perms.readyForApp) {
-      context.go('/home');
+
+    if (shortcutMoment != null) {
+      // Skip the brand hold; go straight to the camera (which shows a
+      // permission fallback if camera access isn't granted).
+      final router = ref.read(appRouterProvider);
+      router.go('/home');
+      Future.microtask(() => router.push('/camera?moment=$shortcutMoment'));
       return;
     }
-    if (perms != null && perms.readyForApp) {
-      context.go('/home');
-    } else if (perms != null && perms.completed) {
-      context.go('/permissions');
-    } else {
-      context.go('/onboarding');
-    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 1600));
+    if (!mounted) return;
+    final onboarded = ref.read(permissionsProvider).value?.onboarded ?? false;
+    context.go(onboarded ? '/home' : '/onboarding');
   }
 
   @override

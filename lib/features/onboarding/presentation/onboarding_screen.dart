@@ -2,22 +2,31 @@
 // Slide 2 sells the film "develop-lock" mechanic that defines the product.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../features/splash/presentation/splash_screen.dart' show CameraMark;
 import '../../../shared/widgets/brand.dart';
+import '../data/permissions_store.dart';
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _controller = PageController();
   int _page = 0;
+
+  /// Leaving the intro carousel = onboarding done. Persist it so onboarding
+  /// never shows again, then continue into the first-run auth flow.
+  void _finishOnboarding() {
+    ref.read(permissionsProvider.notifier).markOnboarded();
+    context.go('/auth');
+  }
 
   static const _slides = <_Slide>[
     _Slide(
@@ -47,7 +56,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   void _next() {
     if (_isLast) {
-      context.go('/auth');
+      _finishOnboarding();
     } else {
       _controller.nextPage(
         duration: const Duration(milliseconds: 350),
@@ -82,7 +91,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
-                    onPressed: () => context.go('/auth'),
+                    onPressed: _finishOnboarding,
                     child: Text('Skip',
                         style: Theme.of(context).textTheme.bodyMedium),
                   ),

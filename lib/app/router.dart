@@ -15,7 +15,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../features/active_moment/data/camera_shortcut_store.dart';
 import '../features/auth/presentation/auth_screen.dart';
@@ -31,19 +30,17 @@ import '../features/moments/presentation/members_screen.dart';
 import '../features/moments/presentation/moment_detail_screen.dart';
 import '../features/moments/presentation/moment_settings_screen.dart';
 import '../features/moments/presentation/share_screen.dart';
-import '../features/moments/data/mock_moments.dart';
 import '../features/moments/data/mock_photos.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/onboarding/presentation/permissions_screen.dart';
 import '../features/photos/presentation/photo_viewer_screen.dart';
-import '../features/upload/presentation/upload_actions.dart';
-import '../features/upload/presentation/upload_progress_screen.dart';
 import '../features/profile/presentation/grid_screen.dart';
 import '../features/profile/presentation/profile_edit_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/profile/presentation/settings_screen.dart';
 import '../features/quick_shoot/presentation/camera_screen.dart';
-import '../features/quick_shoot/presentation/shortcut_setup_screen.dart';
+import '../features/quick_shoot/presentation/moment_with_pending_screen.dart';
+import '../features/quick_shoot/presentation/quick_shoot_settings_screen.dart';
 import '../features/splash/presentation/splash_screen.dart';
 import 'theme.dart';
 
@@ -169,27 +166,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
 
-      // Upload progress for real picked/captured files. `extra` carries the
-      // XFile list; `?moment=<code>` is the destination. The picker/camera
-      // step happens before this route via upload_actions so the user always
-      // arrives here with files in hand.
-      GoRoute(
-        path: '/upload-progress',
-        parentNavigatorKey: _rootNavigatorKey,
-        pageBuilder: (_, state) {
-          final code = state.uri.queryParameters['moment'] ?? '';
-          final files = (state.extra as List<XFile>?) ?? const [];
-          final moment = ref.read(momentByCodeProvider(code));
-          return _slideUpPage(
-            key: state.pageKey,
-            child: UploadProgressScreen(
-              files: files,
-              momentCode: code,
-              momentTitle: moment?.title ?? 'your moment',
-            ),
-          );
-        },
-      ),
+      // (Removed) /upload-progress — gallery/camera picks now upload optimistically
+      // inside the moment's photo grid (see upload_actions + the Quick Shoot
+      // PendingPhoto queue), so there is no separate upload screen.
 
       // The one shared fullscreen photo viewer. `:source` selects the
       // collection to page through ('all' → All Photos, otherwise a moment
@@ -215,7 +194,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/shortcut/setup',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (_, _) => const ShortcutSetupScreen(),
+        builder: (_, _) => const QuickShootSettingsScreen(),
+      ),
+      // Moment view surfacing Quick Shoot photos waiting to upload. Kept as a
+      // distinct top-level path so it doesn't collide with /moment/:code's
+      // nested sub-routes (share / insights / members / settings).
+      GoRoute(
+        path: '/pending/:code',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, state) =>
+            MomentWithPendingScreen(code: state.pathParameters['code']!),
       ),
     ],
     errorBuilder: (_, state) => Scaffold(
@@ -224,38 +212,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
-
-/// A modal layer that slides up from the bottom with a soft fade + subtle
-/// scale — the presentation used for the upload flow so it feels like a sheet
-/// rising over the moment rather than a hard screen push.
-CustomTransitionPage<void> _slideUpPage({
-  required LocalKey key,
-  required Widget child,
-}) {
-  return CustomTransitionPage<void>(
-    key: key,
-    child: child,
-    transitionDuration: const Duration(milliseconds: 380),
-    reverseTransitionDuration: const Duration(milliseconds: 300),
-    transitionsBuilder: (_, animation, _, child) {
-      final curved =
-          CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
-      return FadeTransition(
-        opacity: curved,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.06),
-            end: Offset.zero,
-          ).animate(curved),
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.98, end: 1).animate(curved),
-            child: child,
-          ),
-        ),
-      );
-    },
-  );
-}
 
 /// Bottom-tab scaffold — an edge-anchored cream bar that blends into the
 /// scaffold, with a hairline top border and a coral shutter designed into the
@@ -279,30 +235,13 @@ class _TabShell extends ConsumerWidget {
     return 0;
   }
 
-  /// Shutter behavior:
-  ///   • Shortcut ON → straight to the device camera (capture → upload to
-  ///     Active Moment). If no Active Moment is set, prompt once.
-  ///   • Shortcut OFF → ask "Take photo / Upload from gallery"; the chosen
-  ///     branch handles permission gating + device picker via upload_actions.
-  Future<void> _onShutter(BuildContext context, WidgetRef ref) async {
-    final shortcutOn = ref.read(cameraShortcutProvider).value ?? false;
-    if (shortcutOn) {
-      await captureWithCamera(context, ref);
-      return;
-    }
-
-    final choice = await showModalBottomSheet<_ShutterChoice>(
-      context: context,
-      backgroundColor: AppTheme.cream,
-      builder: (_) => const _ShutterChoiceSheet(),
-    );
-    if (choice == null || !context.mounted) return;
-    switch (choice) {
-      case _ShutterChoice.camera:
-        await captureWithCamera(context, ref);
-      case _ShutterChoice.gallery:
-        await pickFromGallery(context, ref);
-    }
+  /// The in-app shutter ALWAYS opens the custom camera directly — no
+  /// "Take photo / Upload from gallery" chooser. The camera resolves the
+  /// last-selected (Active) moment itself; with none ever chosen it opens with
+  /// an empty selector and blocks capture until the user picks one. Closing the
+  /// camera lands on the selected moment.
+  void _onShutter(BuildContext context, WidgetRef ref) {
+    context.push('/camera');
   }
 
   @override
@@ -465,112 +404,3 @@ class _ShutterButtonState extends State<_ShutterButton> {
   }
 }
 
-/// Method-of-capture choice surfaced when Camera Shortcut is off.
-enum _ShutterChoice { camera, gallery }
-
-class _ShutterChoiceSheet extends StatelessWidget {
-  const _ShutterChoiceSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppTheme.cream2,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _ChoiceTile(
-              icon: Icons.camera_alt_rounded,
-              title: 'Take a photo',
-              subtitle: 'Capture and upload to your active moment.',
-              onTap: () => Navigator.of(context).pop(_ShutterChoice.camera),
-            ),
-            const SizedBox(height: 10),
-            _ChoiceTile(
-              icon: Icons.photo_library_rounded,
-              title: 'Upload from gallery',
-              subtitle: 'Pick existing photos to add.',
-              onTap: () => Navigator.of(context).pop(_ShutterChoice.gallery),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ChoiceTile extends StatelessWidget {
-  const _ChoiceTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppTheme.paper,
-      borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: AppTheme.coral.withValues(alpha: 0.08),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-            border: Border.all(color: AppTheme.line),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: AppTheme.cream2,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, size: 20, color: AppTheme.ink),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 2),
-                      Text(subtitle,
-                          style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded,
-                    color: AppTheme.muted, size: 20),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
