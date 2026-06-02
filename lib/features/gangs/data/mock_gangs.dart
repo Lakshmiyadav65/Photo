@@ -51,6 +51,29 @@ class GangsNotifier extends Notifier<List<Gang>> {
   void addGang(Gang gang) {
     state = [gang, ...state];
   }
+
+  /// Owner deletes the gang — it's removed for everyone.
+  /// TODO: wire to Firestore — delete the gang doc + cascade.
+  void remove(String id) {
+    state = [for (final g in state) if (g.id != id) g];
+  }
+
+  /// Current user leaves the gang. The mock list IS the current user's gangs,
+  /// so leaving simply drops it from their dashboard; it stays for the others.
+  /// TODO: wire to Firestore — members = FieldValue.arrayRemove(uid); the gang
+  /// doc itself stays for the remaining members.
+  void leave(String id) {
+    state = [for (final g in state) if (g.id != id) g];
+  }
+
+  /// Toggle the per-user muted flag.
+  /// TODO: wire to Firestore — users/{uid}/gangPrefs/{gangId}.muted.
+  void toggleMute(String id) {
+    state = [
+      for (final g in state)
+        if (g.id == id) g.copyWith(muted: !g.muted) else g,
+    ];
+  }
 }
 
 final gangsProvider =

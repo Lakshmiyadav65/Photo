@@ -8,14 +8,20 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _kCompletedKey = 'permissions_setup_completed';
+const _kOnboardedKey = 'onboarding_completed';
 
 /// Snapshot of all the permission state the app routes off of.
 class PermissionsState {
   const PermissionsState({
+    required this.onboarded,
     required this.completed,
     required this.cameraGranted,
     required this.galleryGranted,
   });
+
+  /// User has finished the first-run onboarding (the intro carousel). Once true,
+  /// onboarding never shows again — the app goes straight to the dashboard.
+  final bool onboarded;
 
   /// User has walked through the onboarding permissions screen at least once.
   final bool completed;
@@ -32,11 +38,13 @@ class PermissionsState {
   bool get readyForApp => completed && cameraGranted && galleryGranted;
 
   PermissionsState copyWith({
+    bool? onboarded,
     bool? completed,
     bool? cameraGranted,
     bool? galleryGranted,
   }) =>
       PermissionsState(
+        onboarded: onboarded ?? this.onboarded,
         completed: completed ?? this.completed,
         cameraGranted: cameraGranted ?? this.cameraGranted,
         galleryGranted: galleryGranted ?? this.galleryGranted,
@@ -50,10 +58,12 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
   @override
   Future<PermissionsState> build() async {
     final prefs = await SharedPreferences.getInstance();
+    final onboarded = prefs.getBool(_kOnboardedKey) ?? false;
     final completed = prefs.getBool(_kCompletedKey) ?? false;
     final cam = await Permission.camera.status;
     final gal = await Permission.photos.status;
     return PermissionsState(
+      onboarded: onboarded,
       completed: completed,
       cameraGranted: _isGrantedStatus(cam),
       galleryGranted: _isGrantedStatus(gal),
@@ -67,6 +77,7 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
     final granted = _isGrantedStatus(status);
     final current = state.value ??
         const PermissionsState(
+          onboarded: false,
           completed: false,
           cameraGranted: false,
           galleryGranted: false,
@@ -80,6 +91,7 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
     final granted = _isGrantedStatus(status);
     final current = state.value ??
         const PermissionsState(
+          onboarded: false,
           completed: false,
           cameraGranted: false,
           galleryGranted: false,
@@ -95,6 +107,7 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
     final gal = await Permission.photos.status;
     final current = state.value ??
         const PermissionsState(
+          onboarded: false,
           completed: false,
           cameraGranted: false,
           galleryGranted: false,
@@ -105,18 +118,33 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
     ));
   }
 
-  /// Mark the onboarding screen as completed. Persisted so we don't show it
-  /// again unless permissions get revoked.
+  /// Mark the onboarding permissions step completed.
   Future<void> markCompleted() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kCompletedKey, true);
     final current = state.value ??
         const PermissionsState(
+          onboarded: false,
           completed: false,
           cameraGranted: false,
           galleryGranted: false,
         );
     state = AsyncValue.data(current.copyWith(completed: true));
+  }
+
+  /// Mark the first-run onboarding (intro carousel) finished. Persisted
+  /// immediately so onboarding never shows again on any later launch.
+  Future<void> markOnboarded() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kOnboardedKey, true);
+    final current = state.value ??
+        const PermissionsState(
+          onboarded: false,
+          completed: false,
+          cameraGranted: false,
+          galleryGranted: false,
+        );
+    state = AsyncValue.data(current.copyWith(onboarded: true));
   }
 }
 

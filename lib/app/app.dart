@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quick_actions/quick_actions.dart';
 
 import '../features/active_moment/data/camera_shortcut_store.dart';
+import '../features/quick_shoot/data/shortcut_repository.dart';
 import 'router.dart';
 import 'scroll_behavior.dart';
 import 'theme.dart';
@@ -19,16 +20,31 @@ class GangRollApp extends ConsumerStatefulWidget {
 }
 
 class _GangRollAppState extends ConsumerState<GangRollApp> {
+  static const _shortcuts = ShortcutRepository();
+
   @override
   void initState() {
     super.initState();
-    // Register the quick-action handler once. When the user taps the "Camera"
-    // shortcut on the launcher, this fires before splash routing decides
-    // where to go — we flip a flag the splash watches.
+    // Dynamic (long-press app icon) quick action — the fallback path.
     const QuickActions().initialize((type) {
       if (type == kCameraShortcutType) {
         ref.read(cameraShortcutLaunchProvider.notifier).set(true);
       }
+    });
+
+    // Pinned home-screen shortcut — WARM start only (app already running):
+    // push the camera, deferred to the next frame so we never navigate while
+    // the navigator is locked. The COLD start is consumed by the splash (which
+    // skips the brand hold and goes straight to the camera).
+    _shortcuts.listen(_warmOpenCamera);
+  }
+
+  /// Warm-start tap of the pinned icon: open the camera bound to the moment.
+  /// Closing the camera (X / back) lands on that moment — handled by the camera.
+  void _warmOpenCamera(String momentId) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(appRouterProvider).push('/camera?moment=$momentId');
     });
   }
 

@@ -10,6 +10,7 @@ import '../../../app/theme.dart';
 import '../../../shared/widgets/app_toggle.dart';
 import '../../../shared/widgets/gang_avatar.dart';
 import '../../active_moment/data/camera_shortcut_store.dart';
+import '../../quick_shoot/presentation/shortcut_toggle_actions.dart';
 
 const _name = 'Aarav Roy';
 const _handle = "@aarav · joined nov '25";
@@ -19,7 +20,11 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final shortcutOn = ref.watch(cameraShortcutProvider).value ?? true;
+    // Off by default while the async pref loads — the persisted default is also
+    // false (see camera_shortcut_store). A `?? true` here used to paint the
+    // toggle ON on first render before prefs resolved, which read as "enabled by
+    // default" to the user (Bug #1). Mirror the real default instead.
+    final shortcutOn = ref.watch(cameraShortcutProvider).value ?? false;
 
     return Scaffold(
       backgroundColor: AppTheme.cream,
@@ -70,19 +75,18 @@ class ProfileScreen extends ConsumerWidget {
             ),
           ),
 
-          // Camera Shortcut toggle card — controls whether the shutter goes
-          // straight to camera or surfaces the destination picker first.
+          // Camera Shortcut toggle card — turning it ON pins a Quick Shoot
+          // icon to the home screen (Android "Add to Home screen?" dialog).
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
             child: _ToggleCard(
               icon: Icons.camera_alt_rounded,
               title: 'Enable camera shortcut',
               subtitle: shortcutOn
-                  ? 'Shutter opens the camera directly.'
-                  : 'Shutter asks where to upload first.',
+                  ? 'Quick Shoot icon added to your home screen.'
+                  : 'Add a Quick Shoot icon to your home screen.',
               value: shortcutOn,
-              onChanged: (v) =>
-                  ref.read(cameraShortcutProvider.notifier).set(v),
+              onChanged: (v) => handleShortcutToggle(context, ref, v),
             ),
           ),
 
@@ -99,6 +103,12 @@ class ProfileScreen extends ConsumerWidget {
                   title: 'My profile',
                   subtitle: 'Name, email, phone & avatar',
                   onTap: () => context.push('/profile/edit'),
+                ),
+                _MenuItem(
+                  icon: Icons.bolt_outlined,
+                  title: 'Quick Shoot',
+                  subtitle: 'Home-screen camera shortcut',
+                  onTap: () => context.push('/shortcut/setup'),
                 ),
                 _MenuItem(
                   icon: Icons.calendar_today_outlined,

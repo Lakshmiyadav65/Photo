@@ -32,8 +32,39 @@ class GangDetailScreen extends ConsumerStatefulWidget {
 class _GangDetailScreenState extends ConsumerState<GangDetailScreen> {
   int _tab = 0;
 
-  void _openMore() {
-    showModalBottomSheet(
+  // Current user — hardcoded until auth lands.
+  // TODO: wire to Firestore — compare currentUser.uid to the gang's ownerId.
+  static const _kCurrentUser = 'Aarav';
+
+  void _snack(String m) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+  Future<bool> _confirm(String title, String body, String confirmLabel) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.paper,
+        title: Text(title, style: Theme.of(context).textTheme.titleLarge),
+        content: Text(body, style: Theme.of(context).textTheme.bodyMedium),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.coralDeep),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _openMore(Gang gang) async {
+    final owner = gang.hostName == _kCurrentUser; // owner → delete; else leave
+    final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: AppTheme.cream,
       builder: (_) => SafeArea(
@@ -42,22 +73,66 @@ class _GangDetailScreenState extends ConsumerState<GangDetailScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
-            for (final (icon, label) in const [
-              (Icons.person_add_alt_rounded, 'Invite to gang'),
-              (Icons.notifications_off_rounded, 'Mute gang'),
-              (Icons.logout_rounded, 'Leave gang'),
-            ])
-              ListTile(
-                leading: Icon(icon, color: AppTheme.ink),
-                title:
-                    Text(label, style: Theme.of(context).textTheme.titleMedium),
-                onTap: () => Navigator.of(context).pop(),
+            ListTile(
+              leading:
+                  const Icon(Icons.person_add_alt_rounded, color: AppTheme.ink),
+              title: Text('Invite to gang',
+                  style: Theme.of(context).textTheme.titleMedium),
+              onTap: () => Navigator.of(context).pop('invite'),
+            ),
+            ListTile(
+              leading: Icon(
+                gang.muted
+                    ? Icons.notifications_active_rounded
+                    : Icons.notifications_off_rounded,
+                color: AppTheme.ink,
               ),
+              title: Text(gang.muted ? 'Unmute gang' : 'Mute gang',
+                  style: Theme.of(context).textTheme.titleMedium),
+              onTap: () => Navigator.of(context).pop('mute'),
+            ),
+            ListTile(
+              leading: Icon(
+                owner ? Icons.delete_outline_rounded : Icons.logout_rounded,
+                color: AppTheme.coralDeep,
+              ),
+              title: Text(
+                owner ? 'Delete gang' : 'Leave gang',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(color: AppTheme.coralDeep),
+              ),
+              onTap: () => Navigator.of(context).pop(owner ? 'delete' : 'leave'),
+            ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
+    if (action == null || !mounted) return;
+    final gangs = ref.read(gangsProvider.notifier);
+    switch (action) {
+      case 'invite':
+        _snack('Invite coming soon');
+      case 'mute':
+        gangs.toggleMute(gang.id);
+        _snack(gang.muted ? 'Gang unmuted' : 'Gang muted');
+      case 'delete':
+        final ok = await _confirm('Delete this gang?',
+            'This permanently removes “${gang.name}” for everyone.', 'Delete');
+        if (ok && mounted) {
+          gangs.remove(gang.id);
+          if (mounted) context.pop(); // back to the gangs list (reflects live)
+        }
+      case 'leave':
+        final ok = await _confirm('Leave this gang?',
+            'You’ll leave “${gang.name}”. It stays for the others.', 'Leave');
+        if (ok && mounted) {
+          gangs.leave(gang.id);
+          if (mounted) context.pop();
+        }
+    }
   }
 
   @override
@@ -88,7 +163,7 @@ class _GangDetailScreenState extends ConsumerState<GangDetailScreen> {
             _DetailHeader(
               name: gang.name,
               onBack: () => context.pop(),
-              onMore: _openMore,
+              onMore: () => _openMore(gang),
             ),
             const SizedBox(height: 6),
             Hero(

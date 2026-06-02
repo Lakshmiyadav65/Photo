@@ -1,68 +1,60 @@
-// Camera Shortcut preference + system shortcut sync. Enabling registers an
-// app shortcut (long-press on the launcher icon) so the user can jump
-// straight into the camera; disabling clears it. On launch via the shortcut,
-// [cameraShortcutLaunchProvider] is flipped to true so the splash routes
-// directly to the camera flow.
+// Quick Shoot shortcut — the home-screen launcher shortcut that jumps straight
+// into the custom camera, bound to one chosen moment.
 //
-// Note on Android: quick_actions exposes items via long-press on the app icon
-// (Android 7.1+). Some launchers (Nova, Pixel Launcher) let the user drag
-// these onto the home screen for a true pinned shortcut.
+// Two persisted pieces of state, both in shared_preferences:
+//   • enabled flag  (camera_shortcut_enabled)  — off by default (Bug #1).
+//   • bound moment  (quick_shoot_moment_*)      — code + denormalized name.
 //
-//   ON (user enabled): tap shutter → camera (uses Active Moment if set, else
-//                      prompts once).
-//   OFF (default): tap shutter → "Take photo / Upload from gallery" sheet.
+// The OS shortcut is registered via quick_actions. Its label is
+// "Quick Shoot — {moment name}" so the user can see, on long-press of the app
+// icon, exactly where shots will land. Enabling without a bound moment leaves
+// no shortcut (the settings screen blocks that path); changing the moment while
+// enabled re-labels the shortcut.
 //
-// Persisted via shared_preferences so the choice survives restarts.
+// On Android, quick_actions exposes items via long-press on the app icon
+// (Android 7.1+). Some launchers (Nova, Pixel) let the user drag these onto the
+// home screen for a true pinned shortcut.
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:quick_actions/quick_actions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _kPrefsKey = 'camera_shortcut_enabled';
-// Off by default — users must intentionally turn the shortcut on during
-// onboarding (or from Profile later). Persists once toggled.
-const _kDefault = false;
+const _kEnabledKey = 'camera_shortcut_enabled';
+const _kMomentCodeKey = 'quick_shoot_moment_code';
+const _kMomentNameKey = 'quick_shoot_moment_name';
 
-/// App shortcut type id — matches what the handler in app.dart listens for.
+// Off by default — users must intentionally turn the shortcut on (Bug #1).
+const _kDefaultEnabled = false;
+
+/// App shortcut type id — retained for the (dormant) quick-action launch hook
+/// in app.dart. Quick Shoot now uses a *pinned* home-screen icon instead of a
+/// dynamic (long-press) shortcut, so this store no longer creates dynamic ones.
 const String kCameraShortcutType = 'capture_camera';
 
-final _quickActions = const QuickActions();
+/// One moment bound to the Quick Shoot shortcut. [name] is denormalized so the
+/// shortcut label and settings UI can render offline without resolving the code.
+class QuickShootBinding {
+  const QuickShootBinding({required this.code, required this.name});
 
-Future<void> _setSystemShortcut(bool enabled) async {
-  try {
-    if (enabled) {
-      await _quickActions.setShortcutItems(const [
-        ShortcutItem(
-          type: kCameraShortcutType,
-          localizedTitle: 'Camera',
-          // Uses the app's launcher icon; OS scales to the shortcut size.
-          icon: 'ic_launcher',
-        ),
-      ]);
-    } else {
-      await _quickActions.clearShortcutItems();
-    }
-  } catch (_) {
-    // Best-effort — some platforms / launchers don't support quick actions.
-  }
+  final String code;
+  final String name;
 }
+
+// ── Enabled flag ───────────────────────────────────────────────────────────
 
 class CameraShortcutNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
     final prefs = await SharedPreferences.getInstance();
-    final enabled = prefs.getBool(_kPrefsKey) ?? _kDefault;
-    // Keep the OS shortcut state in sync with the persisted preference on
-    // every cold start, so toggles set in a previous session still hold.
-    await _setSystemShortcut(enabled);
-    return enabled;
+    return prefs.getBool(_kEnabledKey) ?? _kDefaultEnabled;
   }
 
+  /// Persist the enabled flag. The actual home-screen icon is pinned separately
+  /// via [ShortcutRepository] (a pinned shortcut can't be re-created silently on
+  /// every launch — it needs the user's one-time "Add to Home screen" consent).
   Future<void> set(bool enabled) async {
     state = AsyncValue.data(enabled);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kPrefsKey, enabled);
-    await _setSystemShortcut(enabled);
+    await prefs.setBool(_kEnabledKey, enabled);
   }
 }
 
@@ -71,9 +63,43 @@ final cameraShortcutProvider =
   CameraShortcutNotifier.new,
 );
 
-/// Flipped to true when the user launches the app via the Camera quick action.
-/// The splash consumes this to route straight to camera; the tab shell clears
-/// it after triggering the shutter, so the trigger fires once per launch.
+// ── Bound moment ─────────────────────────────────────────────────────────────
+
+class QuickShootBindingNotifier extends AsyncNotifier<QuickShootBinding?> {
+  @override
+  Future<QuickShootBinding?> build() async {
+    final prefs = await SharedPreferences.getInstance();
+    final code = prefs.getString(_kMomentCodeKey);
+    final name = prefs.getString(_kMomentNameKey);
+    if (code == null || name == null) return null;
+    return QuickShootBinding(code: code, name: name);
+  }
+
+  /// Bind [code]/[name] as the Quick Shoot destination.
+  Future<void> bind(String code, String name) async {
+    state = AsyncValue.data(QuickShootBinding(code: code, name: name));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kMomentCodeKey, code);
+    await prefs.setString(_kMomentNameKey, name);
+  }
+
+  /// Drop the binding (e.g. the moment was deleted).
+  Future<void> clear() async {
+    state = const AsyncValue.data(null);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kMomentCodeKey);
+    await prefs.remove(_kMomentNameKey);
+  }
+}
+
+final quickShootBindingProvider =
+    AsyncNotifierProvider<QuickShootBindingNotifier, QuickShootBinding?>(
+  QuickShootBindingNotifier.new,
+);
+
+/// Flipped to true when the user launches the app via the Quick Shoot shortcut.
+/// The splash consumes this to route straight to the custom camera; the tab
+/// shell clears it after triggering, so the trigger fires once per launch.
 class CameraShortcutLaunchNotifier extends Notifier<bool> {
   @override
   bool build() => false;
@@ -84,4 +110,20 @@ class CameraShortcutLaunchNotifier extends Notifier<bool> {
 final cameraShortcutLaunchProvider =
     NotifierProvider<CameraShortcutLaunchNotifier, bool>(
   CameraShortcutLaunchNotifier.new,
+);
+
+/// The moment code a pinned-icon **cold start** delivered, awaiting consumption
+/// by the splash (which routes to /home then pushes the camera over it, so the
+/// camera survives the splash's own navigation). Null when not launched via the
+/// pinned icon. Warm-start taps navigate directly and don't use this.
+class PendingShortcutMomentNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? code) => state = code;
+}
+
+final pendingShortcutMomentProvider =
+    NotifierProvider<PendingShortcutMomentNotifier, String?>(
+  PendingShortcutMomentNotifier.new,
 );

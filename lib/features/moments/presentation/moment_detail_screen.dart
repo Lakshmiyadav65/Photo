@@ -7,6 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
+import '../../quick_shoot/data/models/pending_photo.dart';
+import '../../quick_shoot/data/providers/photo_queue_provider.dart';
+import '../../quick_shoot/presentation/widgets/pending_photo_tile.dart';
+import '../../quick_shoot/presentation/widgets/upload_progress_banner.dart';
 import '../../upload/presentation/upload_actions.dart';
 import '../data/mock_moments.dart';
 import '../data/mock_photos.dart';
@@ -95,11 +99,17 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
 
     final photos = ref.watch(momentPhotosProvider(widget.code));
     final filtered = _applyFilter(photos);
+    // Quick Shoot local photos (pending → uploaded). Hidden under Favorites.
+    final localPhotos = _filter == _Filter.favorites
+        ? const <PendingPhoto>[]
+        : (ref.watch(localPhotosProvider(widget.code)).value ??
+            const <PendingPhoto>[]);
 
     return Scaffold(
       backgroundColor: AppTheme.cream,
       floatingActionButton: _UploadFab(
-        onTap: () => pickFromGallery(context, ref, momentCode: moment.code),
+        onTap: () => pickFromGallery(context, ref,
+            momentCode: moment.code, fromMoment: true),
       ),
       body: SafeArea(
         bottom: false,
@@ -110,6 +120,8 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
               onBack: () => context.pop(),
               onInsights: () => showInsightsSheet(context, moment, photos),
               onShare: () => context.push('/moment/${moment.code}/share'),
+              // The moment ⋮ opens THIS moment's settings only — gang-level
+              // leave/delete live on the gang screen, never here.
               onMore: () => context.push('/moment/${moment.code}/settings'),
             ),
             _MemberRow(
@@ -125,10 +137,18 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
               value: _filter,
               onChanged: (f) => setState(() => _filter = f),
             ),
+            // Quick Shoot photos waiting to upload to this moment. Renders
+            // nothing when the queue is empty. Tapping through opens the
+            // dedicated pending view with the grey-overlay grid.
+            GestureDetector(
+              onTap: () => context.push('/pending/${moment.code}'),
+              child: UploadProgressBanner(momentId: moment.code),
+            ),
             Expanded(
-              child: filtered.isEmpty
+              child: (filtered.isEmpty && localPhotos.isEmpty)
                   ? _EmptyFilter(filter: _filter)
                   : _PhotoGrid(
+                      localPhotos: localPhotos,
                       photos: filtered,
                       onTap: _openPhoto,
                       onLongPress: _photoActions,
@@ -347,17 +367,22 @@ class _Tab extends StatelessWidget {
 
 class _PhotoGrid extends StatelessWidget {
   const _PhotoGrid({
+    required this.localPhotos,
     required this.photos,
     required this.onTap,
     required this.onLongPress,
   });
 
+  /// Quick Shoot local photos (newest first) — rendered first, greyed while
+  /// pending and full colour once uploaded.
+  final List<PendingPhoto> localPhotos;
   final List<Photo> photos;
   final ValueChanged<Photo> onTap;
   final ValueChanged<Photo> onLongPress;
 
   @override
   Widget build(BuildContext context) {
+    final localCount = localPhotos.length;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(24, 6, 24, 110),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -365,9 +390,15 @@ class _PhotoGrid extends StatelessWidget {
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
       ),
-      itemCount: photos.length,
+      itemCount: localCount + photos.length,
       itemBuilder: (_, i) {
-        final p = photos[i];
+        if (i < localCount) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: PendingPhotoTile(photo: localPhotos[i]),
+          );
+        }
+        final p = photos[i - localCount];
         return GestureDetector(
           onTap: () => onTap(p),
           onLongPress: () => onLongPress(p),
