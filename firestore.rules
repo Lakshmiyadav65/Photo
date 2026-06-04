@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// gang.roll — Firestore security rules
+// Model: simple shared album · delete = leave (remove self) · gangs owner-private.
+// NOTE: validate these with the Firestore emulator before relying on them
+// (`firebase emulators:start` + rules unit tests). First-pass, reviewed by hand.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn()  { return request.auth != null; }
+    function uid()       { return request.auth.uid; }
+
+    // Membership of an event doc, read via get() (one billed read).
+    function eventMembers(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data.memberIds;
+    }
+    function isEventMember(eventId) {
+      return signedIn() && uid() in eventMembers(eventId);
+    }
+
+    // ---- users -------------------------------------------------------------
+    // Profiles are readable by any signed-in user (names/avatars show up in
+    // rolls); writable only by their owner.
+    match /users/{userId} {
+      allow read:          if signedIn();
+      allow create, update: if uid() == userId;
+      allow delete:        if false;
+    }
+
+    // ---- join-code registry ------------------------------------------------
+    // `codes/{CODE}` -> { eventId }. Any signed-in user may read it to join.
+    // Created only as part of the create-roll transaction; never mutated.
+    match /codes/{code} {
+      allow read:   if signedIn();
+      allow create: if signedIn() && request.resource.data.eventId is string;
+      allow update, delete: if false;
+    }
+
+    // ---- events (rolls) ----------------------------------------------------
+    match /events/{eventId} {
+
+      function isHost() { return resource.data.hostId == uid(); }
+
+      // Caller adds ONLY themselves to memberIds (join).
+      function onlySelfAdded() {
+        return !(uid() in resource.data.memberIds)
+            && (uid() in request.resource.data.memberIds)
+            && request.resource.data.memberIds.removeAll(resource.data.memberIds).hasOnly([uid()])
+            && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1;
+      }
+      // Caller removes ONLY themselves from memberIds (leave / delete-from-my-view).
+      function onlySelfRemoved() {
+        return (uid() in resource.data.memberIds)
+            && !(uid() in request.resource.data.memberIds)
+            && resource.data.memberIds.removeAll(request.resource.data.memberIds).hasOnly([uid()])
+            && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1;
+      }
+
+      allow read: if signedIn() && uid() in resource.data.memberIds;
+
+      // Create: caller is host and the sole initial member.
+      allow create: if signedIn()
+        && request.resource.data.hostId == uid()
+        && request.resource.data.memberIds == [uid()];
+
+      // Update: host edits metadata/counters, OR a user joins/leaves themselves.
+      allow update: if signedIn() && (isHost() || onlySelfAdded() || onlySelfRemoved());
+
+      // Hard delete reserved for the host (MVP uses leave; host cleanup later).
+      allow delete: if signedIn() && isHost();
+
+      // members subcollection — per-member detail
+      match /members/{memberId} {
+        allow read:                 if isEventMember(eventId);
+        allow create, update, delete: if signedIn() && memberId == uid();
+      }
+
+      // photos subcollection — metadata only; bytes live in Cloudflare R2
+      match /photos/{photoId} {
+        allow read:   if isEventMember(eventId);
+        allow create: if isEventMember(eventId)
+                      && request.resource.data.uploaderId == uid();
+        allow update: if isEventMember(eventId);              // favorite toggle
+        allow delete: if signedIn() && resource.data.uploaderId == uid();
+      }
+    }
+
+    // ---- gangs (personal, owner-private) -----------------------------------
+    match /gangs/{gangId} {
+      allow read, update, delete: if signedIn() && resource.data.ownerId == uid();
+      allow create:               if signedIn() && request.resource.data.ownerId == uid();
+    }
+  }
+}

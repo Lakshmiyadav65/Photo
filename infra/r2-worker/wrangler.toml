@@ -1,0 +1,15 @@
+name = "gangroll-r2-uploads"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Public, non-secret config. Fill these in from your Cloudflare + Firebase setup.
+[vars]
+R2_BUCKET = "gangroll-media"
+FIREBASE_PROJECT_ID = "gang-roll"            # your Firebase project id
+MEDIA_BASE_URL = "https://media.example.com" # R2 bucket's public custom domain
+ALLOWED_ORIGIN = "*"                          # tighten to your web origin in prod
+
+# Secrets — DO NOT put these here. Set them with:
+#   wrangler secret put R2_ACCOUNT_ID
+#   wrangler secret put R2_ACCESS_KEY_ID
+#   wrangler secret put R2_SECRET_ACCESS_KEY
