@@ -18,13 +18,9 @@ import 'package:share_plus/share_plus.dart';
 import '../../../app/theme.dart';
 import '../../../core/utils/code_generator.dart';
 import '../../../shared/widgets/brand.dart';
-import '../data/mock_moments.dart';
-import '../domain/moment.dart';
+import '../../auth/data/auth_repository.dart';
+import '../data/repositories/events_repository.dart';
 import 'widgets/press_card.dart';
-
-// Current user — hardcoded until auth lands. Phase 3 sources this from the
-// signed-in user doc.
-const _kCurrentUser = 'Aarav';
 
 // Two steps now: name the moment, then invite. Covers are auto-generated from
 // the first uploaded photo (see momentCoverGradient), so there's no cover step.
@@ -134,29 +130,33 @@ class _CreateRollFlowState extends ConsumerState<CreateRollFlow> {
     if (chosen != null && mounted) setState(() => _vibe = chosen);
   }
 
-  void _finish() {
+  Future<void> _finish() async {
     HapticFeedback.mediumImpact();
-    final now = DateTime.now();
-    // Host + any members carried in from a Gang launch ("Members Auto Added").
-    final members = <String>[
-      _kCurrentUser,
-      for (final name in widget.prefilledMembers)
-        if (name != _kCurrentUser) name,
-    ];
-    final moment = Moment(
-      id: _code.toLowerCase(),
-      title: _titleCtrl.text.trim(),
-      code: _code,
-      state: RollState.live,
-      photoCount: 0,
-      memberCount: members.length,
-      members: members,
-      vibe: _vibe,
-      endsAt: _endDate,
-      lastActiveAt: now,
-    );
-    ref.read(momentsProvider.notifier).addMoment(moment);
-    context.pop();
+    final user = ref.read(authStateProvider).value;
+    if (user == null) {
+      _toast('Please sign in again.');
+      return;
+    }
+    // Note: invitees join via the code (the create rule seeds only the host),
+    // so prefilledMembers from a Gang launch aren't seeded here.
+    try {
+      await ref.read(eventsRepositoryProvider).createEvent(
+            host: user,
+            title: _titleCtrl.text.trim(),
+            vibe: _vibe,
+            code: _code,
+          );
+      if (mounted) context.pop();
+    } catch (_) {
+      _toast("Couldn't create the moment. Please try again.");
+    }
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

@@ -11,11 +11,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
 import '../../../shared/widgets/brand.dart';
 import '../../../shared/widgets/gang_avatar.dart';
-import '../data/mock_moments.dart';
+import '../../auth/data/auth_repository.dart';
+import '../data/repositories/events_repository.dart';
 import '../domain/moment.dart';
 import 'widgets/moment_cover.dart';
 import 'widgets/press_card.dart';
@@ -39,16 +41,16 @@ class JoinMomentScreen extends StatelessWidget {
       JoinRollFlow(prefilledCode: prefilledCode);
 }
 
-class JoinRollFlow extends StatefulWidget {
+class JoinRollFlow extends ConsumerStatefulWidget {
   const JoinRollFlow({super.key, this.prefilledCode});
 
   final String? prefilledCode;
 
   @override
-  State<JoinRollFlow> createState() => _JoinRollFlowState();
+  ConsumerState<JoinRollFlow> createState() => _JoinRollFlowState();
 }
 
-class _JoinRollFlowState extends State<JoinRollFlow> {
+class _JoinRollFlowState extends ConsumerState<JoinRollFlow> {
   final _codeCtrl = TextEditingController();
   final _codeFocus = FocusNode();
   late final PageController _page;
@@ -79,8 +81,9 @@ class _JoinRollFlowState extends State<JoinRollFlow> {
     if (_error) setState(() => _error = false);
   }
 
-  void _trySubmit(String code) {
-    final match = mockMomentByCode(code);
+  Future<void> _trySubmit(String code) async {
+    final match = await ref.read(eventsRepositoryProvider).lookupByCode(code);
+    if (!mounted) return;
     if (match != null) {
       _codeFocus.unfocus();
       setState(() {
@@ -134,9 +137,23 @@ class _JoinRollFlowState extends State<JoinRollFlow> {
     }
   }
 
-  void _join() {
+  Future<void> _join() async {
     HapticFeedback.mediumImpact();
-    context.pop();
+    final user = ref.read(authStateProvider).value;
+    if (user == null) return;
+    try {
+      await ref
+          .read(eventsRepositoryProvider)
+          .joinByCode(code: _codeCtrl.text, user: user);
+      if (mounted) context.pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text("Couldn't join that moment.")),
+        );
+    }
   }
 
   @override

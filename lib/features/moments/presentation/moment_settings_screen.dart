@@ -10,11 +10,11 @@ import 'package:intl/intl.dart';
 
 import '../../../app/theme.dart';
 import '../../../shared/widgets/app_toggle.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/mock_moments.dart';
+import '../data/repositories/events_repository.dart';
 import '../domain/moment.dart';
 import 'widgets/photo_thumb.dart';
-
-const _kCurrentUser = 'Aarav';
 
 class MomentSettingsScreen extends ConsumerStatefulWidget {
   const MomentSettingsScreen({super.key, required this.code});
@@ -74,7 +74,7 @@ class _MomentSettingsScreenState extends ConsumerState<MomentSettingsScreen> {
       confirmLabel: 'Delete',
     );
     if (!ok || !mounted) return;
-    ref.read(momentsProvider.notifier).remove(moment.code);
+    await _leaveRoll(moment);
     if (mounted) context.go('/home');
   }
 
@@ -87,7 +87,7 @@ class _MomentSettingsScreenState extends ConsumerState<MomentSettingsScreen> {
       destructive: false,
     );
     if (!ok || !mounted) return;
-    ref.read(momentsProvider.notifier).archive(moment.code);
+    await _leaveRoll(moment);
     if (mounted) context.go('/home');
   }
 
@@ -99,8 +99,18 @@ class _MomentSettingsScreenState extends ConsumerState<MomentSettingsScreen> {
       confirmLabel: 'Leave',
     );
     if (!ok || !mounted) return;
-    ref.read(momentsProvider.notifier).leave(moment.code);
+    await _leaveRoll(moment);
     if (mounted) context.go('/home');
+  }
+
+  /// All three danger actions collapse to "leave" in the simple-album model:
+  /// remove yourself from the roll (it stays for everyone else).
+  Future<void> _leaveRoll(Moment moment) async {
+    final uid = ref.read(authStateProvider).value?.uid;
+    if (uid == null) return;
+    await ref
+        .read(eventsRepositoryProvider)
+        .leaveEvent(eventId: moment.id, uid: uid);
   }
 
   @override
@@ -178,7 +188,8 @@ class _MomentSettingsScreenState extends ConsumerState<MomentSettingsScreen> {
                     ),
                   ]),
                   const SizedBox(height: 26),
-                  if (moment.hostName == _kCurrentUser) ...[
+                  if (moment.hostName ==
+                      ref.watch(authStateProvider).value?.displayName) ...[
                     _GroupCard(children: [
                       _DangerRow(
                         label: 'Archive moment',

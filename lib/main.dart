@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/firebase_auth_repository.dart';
+import 'features/moments/data/repositories/events_repository.dart';
+import 'features/moments/data/repositories/firebase_events_repository.dart';
 import 'shared/services/firebase_bootstrap.dart';
 
 Future<void> main() async {
@@ -31,6 +33,10 @@ Future<void> main() async {
               FirebaseAuth.instance,
               FirebaseFirestore.instance,
             ),
+          ),
+        if (firebaseStatus == FirebaseStatus.ready)
+          eventsRepositoryProvider.overrideWithValue(
+            FirebaseEventsRepository(FirebaseFirestore.instance),
           ),
       ],
       child: const GangRollApp(),

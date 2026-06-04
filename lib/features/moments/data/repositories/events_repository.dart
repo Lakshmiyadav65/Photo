@@ -13,12 +13,20 @@ abstract class EventsRepository {
   /// A single roll by id (emits null if it's gone or the user isn't a member).
   Stream<Moment?> watchEvent(String eventId);
 
-  /// Create a roll; generates a unique join code. Returns the new [Moment].
+  /// Create a roll with the given (already-displayed) join code. Returns the
+  /// new [Moment]. The caller generates the code so it can be shared before the
+  /// roll is persisted.
   Future<Moment> createEvent({
     required AuthUser host,
     required String title,
+    required String code,
     String? vibe,
   });
+
+  /// Resolve a share code to a lightweight preview WITHOUT joining — backed by
+  /// the public `codes/{CODE}` doc (non-members can't read the event itself).
+  /// Returns null if the code matches no roll.
+  Future<Moment?> lookupByCode(String code);
 
   /// Join a roll by its share code. Throws [EventNotFoundException] when the
   /// code resolves to nothing.
