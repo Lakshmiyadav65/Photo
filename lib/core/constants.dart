@@ -28,4 +28,28 @@ class AppConstants {
 
   // Splash duration per spec App Flow doc.
   static const Duration splashDuration = Duration(milliseconds: 800);
+
+  // ── In-app updates (GitHub Releases) ───────────────────────────────────────
+  // The source of truth for "is a new version out?" is the latest *published*
+  // GitHub Release (not commits/pushes). The public `releases/latest` endpoint
+  // already excludes drafts and pre-releases, so a push only triggers a
+  // notification once it's cut into a Release. Public repo → no token needed.
+  static const String githubReleasesOwner = 'Lakshmiyadav65';
+  static const String githubReleasesRepo = 'Photo';
+
+  static String get githubLatestReleaseApi =>
+      'https://api.github.com/repos/$githubReleasesOwner/$githubReleasesRepo/releases/latest';
+
+  // Fallback "Update now" target when a release carries no html_url (rare).
+  static String get githubReleasesPage =>
+      'https://github.com/$githubReleasesOwner/$githubReleasesRepo/releases/latest';
+
+  // Re-check cadence while the app stays open (the launch check runs once on
+  // start, independent of this). Kept deliberately infrequent so we never spam
+  // GitHub or the user.
+  static const Duration updateCheckInterval = Duration(hours: 6);
+
+  // Network timeout for a single update check — keeps a slow/offline network
+  // from leaving the check hanging.
+  static const Duration updateCheckTimeout = Duration(seconds: 15);
 }

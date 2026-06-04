@@ -67,6 +67,13 @@ dependencies:
   json_annotation: ^4.12.0
   image_gallery_saver_plus: ^4.0.1
   fluttertoast: ^9.1.0
+  # In-app update notifications — checks GitHub Releases for a newer version.
+  # http: query the public releases/latest endpoint (no token; public repo).
+  # url_launcher: open the release/download page on "Update now".
+  # package_info_plus: read the installed app version at runtime to compare.
+  http: ^1.2.2
+  url_launcher: ^6.3.0
+  package_info_plus: ^10.1.0
   # Local upload queue for Quick Shoot — photos captured via the home-screen
   # shortcut are persisted here as 'pending' and uploaded only when the user
   # opens the app and taps Resume (no background upload). Already resolved

@@ -42,6 +42,7 @@ import '../features/quick_shoot/presentation/camera_screen.dart';
 import '../features/quick_shoot/presentation/moment_with_pending_screen.dart';
 import '../features/quick_shoot/presentation/quick_shoot_settings_screen.dart';
 import '../features/splash/presentation/splash_screen.dart';
+import '../features/updates/presentation/update_toast.dart';
 import 'theme.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -261,7 +262,14 @@ class _TabShell extends ConsumerWidget {
     return Scaffold(
       extendBody: true,
       backgroundColor: AppTheme.cream,
-      body: child,
+      // The tab content, with the floating "update available" toast layered
+      // above it (renders nothing until an un-dismissed update exists).
+      body: Stack(
+        children: [
+          child,
+          const UpdateToastLayer(),
+        ],
+      ),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           color: AppTheme.cream,
