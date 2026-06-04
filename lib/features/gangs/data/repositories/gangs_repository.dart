@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/gang.dart';
-import '../models/gang_data.dart';
 
 /// Data boundary for gangs (personal, owner-private member groupings). The
 /// Firebase-backed implementation is wired in `main.dart`.
@@ -9,11 +8,11 @@ abstract class GangsRepository {
   /// The signed-in user's gangs, newest first.
   Stream<List<Gang>> watchMyGangs(String uid);
 
-  /// Create a gang from a hand-picked set of members.
+  /// Create a gang from a hand-picked set of member display names.
   Future<Gang> createGang({
     required String ownerId,
     required String name,
-    required List<GangMember> members,
+    required List<String> memberNames,
   });
 
   Future<void> setMuted({required String gangId, required bool muted});

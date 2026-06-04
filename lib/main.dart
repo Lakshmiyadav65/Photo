@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app/app.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/firebase_auth_repository.dart';
+import 'features/gangs/data/repositories/firebase_gangs_repository.dart';
+import 'features/gangs/data/repositories/gangs_repository.dart';
 import 'features/moments/data/repositories/events_repository.dart';
 import 'features/moments/data/repositories/firebase_events_repository.dart';
 import 'shared/services/firebase_bootstrap.dart';
@@ -37,6 +39,10 @@ Future<void> main() async {
         if (firebaseStatus == FirebaseStatus.ready)
           eventsRepositoryProvider.overrideWithValue(
             FirebaseEventsRepository(FirebaseFirestore.instance),
+          ),
+        if (firebaseStatus == FirebaseStatus.ready)
+          gangsRepositoryProvider.overrideWithValue(
+            FirebaseGangsRepository(FirebaseFirestore.instance),
           ),
       ],
       child: const GangRollApp(),

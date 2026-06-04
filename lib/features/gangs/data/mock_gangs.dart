@@ -1,83 +1,27 @@
-// Mock gangs — replaced by a derived stream (membership overlap across
-// moments) once the data layer lands. The store is mutable so newly created
-// gangs surface on the Gangs screen instantly (spec: "no refresh required").
+// Gangs providers — backed by a live Firestore stream of the signed-in user's
+// gangs (owner-private). The Search tab reads [gangsProvider]; the Create Gang
+// member pool comes from [availableMembersProvider] (people in your rolls).
+// Mutations go through [gangsRepositoryProvider] at the call sites. (Filename
+// kept so existing imports stay valid.)
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../auth/data/auth_repository.dart';
 import '../../moments/data/mock_moments.dart';
 import '../domain/gang.dart';
+import 'repositories/gangs_repository.dart';
 
-final _seedGangs = <Gang>[
-  Gang(
-    id: 'college-crew',
-    name: 'College crew',
-    members: ['Aarav', 'Meera', 'Rohan', 'Karan', 'Priya', 'Dev'],
-    createdAt: DateTime(2024, 1, 12),
-    momentCount: 12,
-    momentCodes: ['GOA204', 'GANG5K'],
-  ),
-  Gang(
-    id: 'trip-squad',
-    name: 'Trip squad',
-    members: ['Priya', 'Aarav', 'Karan', 'Meera'],
-    createdAt: DateTime(2024, 3, 4),
-    momentCount: 5,
-    momentCodes: ['GOA204', 'HYD909'],
-  ),
-  Gang(
-    id: 'family',
-    name: 'Family',
-    members: ['Aarav', 'Meera', 'Isha', 'Sana', 'Dev', 'Ananya', 'Rohan'],
-    createdAt: DateTime(2023, 6, 20),
-    momentCount: 23,
-    momentCodes: ['SATN8T', 'HYD909'],
-  ),
-  Gang(
-    id: 'supper-club',
-    name: 'Supper club',
-    members: ['Rohan', 'Ananya', 'Karan', 'Meera', 'Dev'],
-    createdAt: DateTime(2024, 9, 2),
-    momentCount: 8,
-    momentCodes: ['SATN8T'],
-  ),
-];
+/// Live stream of the signed-in user's gangs. Emits `[]` when signed out.
+final myGangsProvider = StreamProvider<List<Gang>>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return Stream.value(const <Gang>[]);
+  return ref.watch(gangsRepositoryProvider).watchMyGangs(user.uid);
+});
 
-class GangsNotifier extends Notifier<List<Gang>> {
-  @override
-  List<Gang> build() => List<Gang>.unmodifiable(_seedGangs);
-
-  /// Insert a newly-created gang at the top so it appears on the Gangs screen
-  /// immediately after Save (spec: "no refresh required").
-  void addGang(Gang gang) {
-    state = [gang, ...state];
-  }
-
-  /// Owner deletes the gang — it's removed for everyone.
-  /// TODO: wire to Firestore — delete the gang doc + cascade.
-  void remove(String id) {
-    state = [for (final g in state) if (g.id != id) g];
-  }
-
-  /// Current user leaves the gang. The mock list IS the current user's gangs,
-  /// so leaving simply drops it from their dashboard; it stays for the others.
-  /// TODO: wire to Firestore — members = FieldValue.arrayRemove(uid); the gang
-  /// doc itself stays for the remaining members.
-  void leave(String id) {
-    state = [for (final g in state) if (g.id != id) g];
-  }
-
-  /// Toggle the per-user muted flag.
-  /// TODO: wire to Firestore — users/{uid}/gangPrefs/{gangId}.muted.
-  void toggleMute(String id) {
-    state = [
-      for (final g in state)
-        if (g.id == id) g.copyWith(muted: !g.muted) else g,
-    ];
-  }
-}
-
-final gangsProvider =
-    NotifierProvider<GangsNotifier, List<Gang>>(GangsNotifier.new);
+/// The gangs list (empty while the stream loads). Kept under the original name.
+final gangsProvider = Provider<List<Gang>>((ref) {
+  return ref.watch(myGangsProvider).value ?? const <Gang>[];
+});
 
 final gangByIdProvider = Provider.family<Gang?, String>((ref, id) {
   for (final g in ref.watch(gangsProvider)) {
@@ -88,8 +32,7 @@ final gangByIdProvider = Provider.family<Gang?, String>((ref, id) {
 
 /// People the user has shared moments with — the pool the Create Gang member
 /// selector draws from. Excludes the current user (they're always the owner).
-/// Spec: "Members can only be selected from people already present in Moments
-/// the user belongs to."
+/// Spec: members can only be picked from people already in the user's moments.
 final availableMembersProvider = Provider.family<List<String>, String>((
   ref,
   currentUser,

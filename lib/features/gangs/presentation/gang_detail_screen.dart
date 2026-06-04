@@ -15,6 +15,7 @@ import '../../moments/data/mock_moments.dart';
 import '../../moments/domain/moment.dart';
 import '../../moments/presentation/widgets/avatar_stack.dart';
 import '../data/mock_gangs.dart';
+import '../data/repositories/gangs_repository.dart';
 import '../domain/gang.dart';
 import 'widgets/gang_card.dart';
 import 'widgets/gang_members_list.dart';
@@ -111,25 +112,25 @@ class _GangDetailScreenState extends ConsumerState<GangDetailScreen> {
       ),
     );
     if (action == null || !mounted) return;
-    final gangs = ref.read(gangsProvider.notifier);
+    final repo = ref.read(gangsRepositoryProvider);
     switch (action) {
       case 'invite':
         _snack('Invite coming soon');
       case 'mute':
-        gangs.toggleMute(gang.id);
-        _snack(gang.muted ? 'Gang unmuted' : 'Gang muted');
+        await repo.setMuted(gangId: gang.id, muted: !gang.muted);
+        if (mounted) _snack(gang.muted ? 'Gang unmuted' : 'Gang muted');
       case 'delete':
         final ok = await _confirm('Delete this gang?',
             'This permanently removes “${gang.name}” for everyone.', 'Delete');
         if (ok && mounted) {
-          gangs.remove(gang.id);
+          await repo.deleteGang(gang.id);
           if (mounted) context.pop(); // back to the gangs list (reflects live)
         }
       case 'leave':
         final ok = await _confirm('Leave this gang?',
             'You’ll leave “${gang.name}”. It stays for the others.', 'Leave');
         if (ok && mounted) {
-          gangs.leave(gang.id);
+          await repo.deleteGang(gang.id);
           if (mounted) context.pop();
         }
     }

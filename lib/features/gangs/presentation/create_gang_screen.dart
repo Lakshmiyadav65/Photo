@@ -11,12 +11,12 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme.dart';
 import '../../../shared/widgets/brand.dart';
 import '../../../shared/widgets/gang_avatar.dart';
+import '../../auth/data/auth_repository.dart';
 import '../data/mock_gangs.dart';
-import '../domain/gang.dart';
+import '../data/repositories/gangs_repository.dart';
 import 'widgets/section_label.dart';
 
 const int _kStepCount = 2;
-const _kCurrentUser = 'Aarav';
 
 class CreateGangScreen extends ConsumerStatefulWidget {
   const CreateGangScreen({super.key});
@@ -58,31 +58,37 @@ class _CreateGangScreenState extends ConsumerState<CreateGangScreen> {
     });
   }
 
-  void _save() {
+  Future<void> _save() async {
     HapticFeedback.mediumImpact();
-    final now = DateTime.now();
-    // Slugify the name + suffix with timestamp so two gangs with the same name
-    // don't collide.
-    final base = _nameCtrl.text
-        .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'(^-|-$)'), '');
-    final slug = '$base-${now.millisecondsSinceEpoch}';
-    final gang = Gang(
-      id: slug,
-      name: _nameCtrl.text.trim(),
-      members: [_kCurrentUser, ..._selected],
-      createdAt: now,
-      momentCount: 0,
-    );
-    ref.read(gangsProvider.notifier).addGang(gang);
-    context.pop();
+    final me = ref.read(authStateProvider).value;
+    if (me == null) return;
+    try {
+      await ref.read(gangsRepositoryProvider).createGang(
+            ownerId: me.uid,
+            name: _nameCtrl.text.trim(),
+            memberNames: [_displayNameOf(me), ..._selected],
+          );
+      if (mounted) context.pop();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text("Couldn't create the gang.")),
+        );
+    }
   }
+
+  String _displayNameOf(AuthUser u) =>
+      (u.displayName != null && u.displayName!.trim().isNotEmpty)
+          ? u.displayName!.trim()
+          : u.email.split('@').first;
 
   @override
   Widget build(BuildContext context) {
     final isLast = _step == _kStepCount - 1;
+    final me = ref.watch(authStateProvider).value;
+    final currentUser = me == null ? '' : _displayNameOf(me);
     return PopScope(
       canPop: _step == 0,
       onPopInvokedWithResult: (didPop, _) {
@@ -108,7 +114,7 @@ class _CreateGangScreenState extends ConsumerState<CreateGangScreen> {
                       onChanged: (_) => setState(() {}),
                     ),
                     _StepMembers(
-                      currentUser: _kCurrentUser,
+                      currentUser: currentUser,
                       selected: _selected,
                       onToggle: _toggle,
                     ),
