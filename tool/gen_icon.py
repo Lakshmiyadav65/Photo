@@ -69,6 +69,7 @@ for density, size in FOREGROUND.items():
     save(make(size, with_bg=False), density, "ic_launcher_foreground.png")
 
 # Play Store / source icon.
-make(512, with_bg=True).save(os.path.join(os.path.dirname(__file__), "..",
-                                           "ic_launcher_512.png"))
+out = os.path.join(os.path.dirname(__file__), "..", "assets", "branding")
+os.makedirs(out, exist_ok=True)
+make(512, with_bg=True).save(os.path.join(out, "ic_launcher_512.png"))
 print("icons generated")
