@@ -2,5 +2,26 @@
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "photoapp-880ce",
+          "appId": "1:975719145676:android:ce75d5c86e6655db756269",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "photoapp-880ce",
+          "configurations": {
+            "android": "1:975719145676:android:ce75d5c86e6655db756269",
+            "web": "1:975719145676:web:160cff771b6b0625756269",
+            "windows": "1:975719145676:web:9a2dbab4deb4444e756269"
+          }
+        }
+      }
+    }
   }
 }

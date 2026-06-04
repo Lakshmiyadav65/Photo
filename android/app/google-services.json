@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "975719145676",
+    "project_id": "photoapp-880ce",
+    "storage_bucket": "photoapp-880ce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:975719145676:android:ce75d5c86e6655db756269",
+        "android_client_info": {
+          "package_name": "com.gangroll.gang_roll"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCHWm1q0XncOjtKUfib40HZK7n0Opr4OIc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

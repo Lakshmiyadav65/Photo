@@ -4,10 +4,14 @@
 //   2. Attempt Firebase init; gracefully no-op if `flutterfire configure`
 //      hasn't been run yet — so the app still runs during scaffolding.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'features/auth/data/auth_repository.dart';
+import 'features/auth/data/firebase_auth_repository.dart';
 import 'shared/services/firebase_bootstrap.dart';
 
 Future<void> main() async {
@@ -18,6 +22,16 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         firebaseStatusProvider.overrideWithValue(firebaseStatus),
+        // Wire the real auth repository only when Firebase actually came up;
+        // otherwise the provider keeps throwing (the app still runs in the
+        // pre-Firebase mock flow).
+        if (firebaseStatus == FirebaseStatus.ready)
+          authRepositoryProvider.overrideWithValue(
+            FirebaseAuthRepository(
+              FirebaseAuth.instance,
+              FirebaseFirestore.instance,
+            ),
+          ),
       ],
       child: const GangRollApp(),
     ),

@@ -10,14 +10,6 @@
       ]
     },
     {
-      "//": "A roll's photos, newest first.",
-      "collectionGroup": "photos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "uploadedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
       "//": "My gangs, newest first.",
       "collectionGroup": "gangs",
       "queryScope": "COLLECTION",
