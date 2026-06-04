@@ -21,6 +21,11 @@ class AppConstants {
   static const int maxPhotoSizeBytes = 10 * 1024 * 1024; // 10 MB
   static const int maxAvatarSizeBytes = 5 * 1024 * 1024; // 5 MB
 
+  // Cloudflare R2 upload Worker base URL (deployed via infra/r2-worker).
+  // Set this to the `wrangler deploy` URL; empty means uploads fall back to the
+  // simulated uploader.
+  static const String r2WorkerBaseUrl = '';
+
   // Splash duration per spec App Flow doc.
   static const Duration splashDuration = Duration(milliseconds: 800);
 }

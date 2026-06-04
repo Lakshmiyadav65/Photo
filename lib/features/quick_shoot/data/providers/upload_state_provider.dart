@@ -60,8 +60,9 @@ class UploadSession {
 }
 
 class UploadController extends Notifier<UploadSession> {
-  // Stubbed uploader until Firebase Storage is wired; swap behind the interface.
-  final PhotoUploader _uploader = const MockPhotoUploader();
+  // The real R2 uploader is injected via [photoUploaderProvider] (overridden in
+  // main.dart once Firebase is up); falls back to the simulated one otherwise.
+  PhotoUploader get _uploader => ref.read(photoUploaderProvider);
 
   bool _paused = false;
   bool _running = false;

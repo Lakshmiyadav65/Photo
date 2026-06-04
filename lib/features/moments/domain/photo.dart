@@ -7,6 +7,9 @@ class Photo {
     required this.uploader,
     required this.uploadedAt,
     this.favorite = false,
+    this.url,
+    this.thumbUrl,
+    this.isVideo = false,
   });
 
   final String id;
@@ -18,10 +21,22 @@ class Photo {
 
   final bool favorite;
 
+  /// Remote media URL (Cloudflare R2). Null for legacy gradient-placeholder
+  /// tiles; when present, the UI renders the real image.
+  final String? url;
+
+  /// Smaller variant for grids; falls back to [url] when null.
+  final String? thumbUrl;
+
+  final bool isVideo;
+
   Photo copyWith({bool? favorite}) => Photo(
         id: id,
         uploader: uploader,
         uploadedAt: uploadedAt,
         favorite: favorite ?? this.favorite,
+        url: url,
+        thumbUrl: thumbUrl,
+        isVideo: isVideo,
       );
 }

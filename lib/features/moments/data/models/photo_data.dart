@@ -57,5 +57,8 @@ class PhotoData {
         uploader: uploaderName,
         uploadedAt: uploadedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
         favorite: favorite,
+        url: url,
+        thumbUrl: thumbUrl ?? url,
+        isVideo: isVideo,
       );
 }

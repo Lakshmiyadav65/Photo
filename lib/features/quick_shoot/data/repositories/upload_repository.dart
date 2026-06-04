@@ -8,6 +8,8 @@
 
 import 'dart:async';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/pending_photo.dart';
 
 /// Uploads one photo and returns its remote download URL. Reports 0..1 progress
@@ -34,10 +36,15 @@ class MockPhotoUploader implements PhotoUploader {
     onProgress?.call(0.5);
     await Future<void>.delayed(const Duration(milliseconds: 400));
     onProgress?.call(1);
-    // Stand-in for the Firebase Storage download URL.
+    // Stand-in for the real R2 URL.
     return 'mock://uploaded/${photo.momentId}/${photo.id}.jpg';
   }
 }
+
+/// The active uploader. Overridden in `main.dart` with `R2PhotoUploader` once
+/// Firebase is initialised; defaults to the simulated uploader otherwise.
+final photoUploaderProvider =
+    Provider<PhotoUploader>((_) => const MockPhotoUploader());
 
 // ── Real implementation (wire in Phase 5b, after firebase_storage builds) ────
 //
