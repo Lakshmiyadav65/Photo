@@ -7,6 +7,7 @@
 // No background work: this only runs while the app is foregrounded and the user
 // has tapped Resume (per spec — no foreground service / workmanager).
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/pending_photo.dart';
@@ -115,7 +116,9 @@ class UploadController extends Notifier<UploadSession> {
           uploadedAt: DateTime.now(),
         );
         uploaded++;
-      } catch (e) {
+      } catch (e, st) {
+        debugPrint('[gangroll-upload] FAILED id=${photo.id} '
+            'moment=${photo.momentId}: $e\n$st');
         await _queue.updateStatus(
           photo.id,
           PendingStatus.failed,

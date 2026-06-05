@@ -41,17 +41,19 @@ class R2PhotoUploader implements PhotoUploader {
     onProgress?.call(0.1);
 
     // The queue stores the roll's share CODE as momentId, but Firestore keys
-    // events by an auto-generated doc id — resolve it from the code so the photo
-    // doc + counter bump target the real event doc (and pass the rules).
+    // events by an auto-generated doc id. Resolve it by querying my rolls
+    // (memberIds arrayContains me — the only events-query the rules allow) and
+    // matching the code client-side.
+    final code = photo.momentId.toUpperCase();
     final q = await db
         .collection('events')
-        .where('code', isEqualTo: photo.momentId.toUpperCase())
-        .limit(1)
+        .where('memberIds', arrayContains: user.uid)
         .get();
-    if (q.docs.isEmpty) {
+    final match = q.docs.where((d) => (d.data()['code'] as String?) == code);
+    if (match.isEmpty) {
       throw StateError('Roll "${photo.momentId}" not found.');
     }
-    final eventId = q.docs.first.id;
+    final eventId = match.first.id;
 
     // 1. Compress on-device (per spec: compress at upload, not at capture).
     final bytes = await FlutterImageCompress.compressWithFile(
@@ -85,8 +87,11 @@ class R2PhotoUploader implements PhotoUploader {
       onProgress?.call(0.5);
 
       // 3. PUT the bytes straight to R2 via the presigned URL.
+      // R2/S3 require Content-Length (they reject chunked PUTs with 411), so set
+      // it explicitly — otherwise dart:io streams the body chunked.
       final put = await client.putUrl(Uri.parse(data['uploadUrl'] as String));
       put.headers.contentType = ContentType('image', 'jpeg');
+      put.contentLength = bytes.length;
       put.add(bytes);
       final putResp = await put.close();
       await putResp.drain<void>();
