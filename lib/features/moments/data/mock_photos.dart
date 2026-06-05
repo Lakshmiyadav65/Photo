@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/moment.dart';
 import '../domain/photo.dart';
 import 'mock_moments.dart';
+import 'repositories/photos_repository.dart';
 
 List<Photo> photosForMoment(Moment m) {
   if (m.members.isEmpty || m.photoCount == 0) return const [];
@@ -54,10 +55,19 @@ int mockDownloads(Moment m) => m.photoCount * m.memberCount * 4 + m.viewCount;
 
 int mockDurationDays(Moment m) => (m.photoCount / 3).ceil().clamp(1, 60);
 
-final momentPhotosProvider = Provider.family<List<Photo>, String>((ref, code) {
-  // Live lookup so freshly-created moments (not in the seed) still resolve.
+/// Live photos for a moment, streamed from Firestore (events/{id}/photos).
+final momentPhotosStreamProvider =
+    StreamProvider.family<List<Photo>, String>((ref, code) {
   final m = ref.watch(momentByCodeProvider(code));
-  return m == null ? const [] : photosForMoment(m);
+  if (m == null) return Stream.value(const <Photo>[]);
+  return ref.watch(photosRepositoryProvider).watchPhotos(m.id);
+});
+
+/// Sync view of [momentPhotosStreamProvider] (empty while loading). Kept under
+/// the original name so existing consumers (grid, insights, members) are
+/// unchanged.
+final momentPhotosProvider = Provider.family<List<Photo>, String>((ref, code) {
+  return ref.watch(momentPhotosStreamProvider(code)).value ?? const <Photo>[];
 });
 
 /// Every photo across all rolls, newest first — the "All Photos" collection.

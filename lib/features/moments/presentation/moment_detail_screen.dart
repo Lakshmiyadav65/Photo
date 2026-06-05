@@ -407,7 +407,7 @@ class _PhotoGrid extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                PhotoThumb(id: p.id),
+                PhotoThumb(id: p.id, url: p.thumbUrl ?? p.url),
                 if (p.favorite)
                   const Positioned(
                     top: 6,
