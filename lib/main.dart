@@ -61,6 +61,7 @@ Future<void> main() async {
             R2PhotoUploader(
               workerBaseUrl: AppConstants.r2WorkerBaseUrl,
               auth: FirebaseAuth.instance,
+              db: FirebaseFirestore.instance,
               photos: FirebasePhotosRepository(FirebaseFirestore.instance),
             ),
           ),

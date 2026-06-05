@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
@@ -18,12 +19,14 @@ class R2PhotoUploader implements PhotoUploader {
   R2PhotoUploader({
     required this.workerBaseUrl,
     required this.auth,
+    required this.db,
     required this.photos,
   });
 
   /// Deployed Worker base URL, e.g. https://gangroll-r2-uploads.<sub>.workers.dev
   final String workerBaseUrl;
   final FirebaseAuth auth;
+  final FirebaseFirestore db;
   final PhotosRepository photos;
 
   @override
@@ -36,6 +39,19 @@ class R2PhotoUploader implements PhotoUploader {
       throw StateError('Not signed in — cannot upload.');
     }
     onProgress?.call(0.1);
+
+    // The queue stores the roll's share CODE as momentId, but Firestore keys
+    // events by an auto-generated doc id — resolve it from the code so the photo
+    // doc + counter bump target the real event doc (and pass the rules).
+    final q = await db
+        .collection('events')
+        .where('code', isEqualTo: photo.momentId.toUpperCase())
+        .limit(1)
+        .get();
+    if (q.docs.isEmpty) {
+      throw StateError('Roll "${photo.momentId}" not found.');
+    }
+    final eventId = q.docs.first.id;
 
     // 1. Compress on-device (per spec: compress at upload, not at capture).
     final bytes = await FlutterImageCompress.compressWithFile(
@@ -57,7 +73,7 @@ class R2PhotoUploader implements PhotoUploader {
       req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $idToken');
       req.headers.contentType = ContentType.json;
       req.add(utf8.encode(jsonEncode({
-        'eventId': photo.momentId,
+        'eventId': eventId,
         'contentType': 'image/jpeg',
       })));
       final resp = await req.close();
@@ -82,7 +98,7 @@ class R2PhotoUploader implements PhotoUploader {
       // 4. Record metadata + bump the roll's photo count in Firestore.
       final publicUrl = data['publicUrl'] as String;
       await photos.addPhoto(
-        eventId: photo.momentId,
+        eventId: eventId,
         photo: PhotoData(
           id: data['photoId'] as String,
           uploaderId: user.uid,
