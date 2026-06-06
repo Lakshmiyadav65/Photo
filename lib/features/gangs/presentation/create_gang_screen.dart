@@ -246,13 +246,13 @@ class _StepName extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       children: [
         const HeroTitle(
-          before: 'name your ',
+          before: 'Name your ',
           emphasis: 'gang',
           fontSize: 28,
         ),
         const SizedBox(height: 6),
         Text(
-          'a reusable group you can spin into new moments later.',
+          'A reusable group you can spin into new moments later.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 28),
@@ -291,13 +291,13 @@ class _StepMembers extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       children: [
         const HeroTitle(
-          before: 'who\'s in this ',
+          before: 'Who\'s in this ',
           emphasis: 'gang?',
           fontSize: 28,
         ),
         const SizedBox(height: 6),
         Text(
-          'pick from people you already share moments with.',
+          'Pick from people you already share moments with.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
@@ -393,11 +393,11 @@ class _Empty extends StatelessWidget {
                 const Icon(Icons.groups_rounded, size: 24, color: AppTheme.coral),
           ),
           const SizedBox(height: 14),
-          Text('no shared people yet',
+          Text('No shared people yet',
               style: AppText.display(fontSize: 17)),
           const SizedBox(height: 4),
           Text(
-            'join or create a moment with friends, then\nspin them into a gang from here.',
+            'Join or create a moment with friends, then\nspin them into a gang from here.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),

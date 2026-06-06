@@ -59,7 +59,7 @@ class MembersView extends StatelessWidget {
                 children: [
                   const HeroTitle(
                     before: '',
-                    emphasis: 'members',
+                    emphasis: 'Members',
                     fontSize: 24,
                   ),
                   const SizedBox(height: 2),
@@ -158,7 +158,7 @@ class _MemberRow extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('joined $joined',
+                Text('Joined $joined',
                     style: AppText.mono(fontSize: 10, color: AppTheme.muted)),
               ],
             ),

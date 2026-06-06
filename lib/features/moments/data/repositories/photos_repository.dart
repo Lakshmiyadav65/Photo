@@ -10,6 +10,10 @@ abstract class PhotosRepository {
   /// A roll's photos, newest first.
   Stream<List<Photo>> watchPhotos(String eventId);
 
+  /// The roll's cover photo — its first uploaded (oldest) shot, or null when the
+  /// roll has none yet. Cheap (single doc) so the dashboard can show real covers.
+  Stream<Photo?> watchCoverPhoto(String eventId);
+
   /// Record an uploaded photo's metadata (bytes already in R2). Also bumps the
   /// roll's photo count / activity in the same write.
   Future<void> addPhoto({required String eventId, required PhotoData photo});

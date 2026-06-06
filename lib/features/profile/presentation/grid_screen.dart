@@ -77,7 +77,7 @@ class _Tile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            PhotoThumb(id: photo.id),
+            PhotoThumb(id: photo.id, url: photo.thumbUrl ?? photo.url),
             if (photo.favorite)
               const Positioned(
                 top: 6,

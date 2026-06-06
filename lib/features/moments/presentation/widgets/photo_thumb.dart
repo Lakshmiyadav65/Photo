@@ -4,7 +4,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../data/mock_photos.dart';
 import '../../domain/moment.dart';
 
 const List<List<Color>> _palettes = [
@@ -27,11 +26,11 @@ LinearGradient photoGradient(String id) {
   );
 }
 
-/// A moment's cover gradient — auto-derived from its first uploaded photo,
-/// falling back to a default placeholder keyed off the code when the roll has
-/// no photos yet. Single source of truth for covers across the app.
+/// A moment's cover gradient — deterministically derived from its NAME, so the
+/// title drives the look (paired with its initial in [MomentCover]) until a real
+/// photo is uploaded. Single source of truth for the name-based cover design.
 LinearGradient momentCoverGradient(Moment m) =>
-    photoGradient(momentCoverPhotoId(m) ?? m.code);
+    photoGradient(m.title.trim().isEmpty ? m.code : m.title.trim());
 
 class PhotoThumb extends StatelessWidget {
   const PhotoThumb({

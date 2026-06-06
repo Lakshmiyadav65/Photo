@@ -121,7 +121,7 @@ class _Header extends StatelessWidget {
               ),
             ),
           Text(
-            'your',
+            'Your',
             style: GoogleFonts.bricolageGrotesque(
               fontSize: 17,
               fontWeight: FontWeight.w500,
@@ -203,7 +203,7 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            query.trim().isEmpty ? 'no gangs yet' : 'no gangs match',
+            query.trim().isEmpty ? 'No gangs yet' : 'No gangs match',
             style: GoogleFonts.bricolageGrotesque(
               fontSize: 20,
               fontWeight: FontWeight.w600,
@@ -213,8 +213,8 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             query.trim().isEmpty
-                ? 'your gangs form from the friends\nyou share moments with.'
-                : 'try a different name.',
+                ? 'Your gangs form from the friends\nyou share moments with.'
+                : 'Try a different name.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyMedium,
           ),

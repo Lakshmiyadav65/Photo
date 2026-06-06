@@ -249,13 +249,13 @@ class _StepCode extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             children: [
               const HeroTitle(
-                before: 'got an ',
+                before: 'Got an ',
                 emphasis: 'invite?',
                 fontSize: 28,
               ),
               const SizedBox(height: 6),
               Text(
-                'enter the 6-letter code.',
+                'Enter the 6-letter code.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 32),
@@ -271,7 +271,7 @@ class _StepCode extends StatelessWidget {
                     ? Padding(
                         padding: const EdgeInsets.only(top: 14),
                         child: Text(
-                          "we couldn't find a moment with that code.",
+                          "We couldn't find a moment with that code.",
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: AppTheme.coralDeep),
@@ -630,7 +630,7 @@ class _HostRow extends StatelessWidget {
               Text(
                 others > 0
                     ? '+ $others others in the moment'
-                    : 'just the host so far',
+                    : 'Just the host so far',
                 style: AppText.mono(fontSize: 11, color: AppTheme.muted),
               ),
             ],
@@ -738,10 +738,10 @@ class _StatsCard extends StatelessWidget {
                     style: AppText.display(fontSize: 20),
                   ),
                   const SizedBox(width: 6),
-                  Text('photos', style: Theme.of(context).textTheme.bodyMedium),
+                  Text('Photos', style: Theme.of(context).textTheme.bodyMedium),
                 ],
               ),
-              Text('so far', style: Theme.of(context).textTheme.bodySmall),
+              Text('So far', style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
         ],

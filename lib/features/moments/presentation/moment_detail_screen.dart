@@ -6,7 +6,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import '../../../app/theme.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../quick_shoot/data/models/pending_photo.dart';
 import '../../quick_shoot/data/providers/photo_queue_provider.dart';
 import '../../quick_shoot/presentation/widgets/pending_photo_tile.dart';
@@ -14,14 +17,13 @@ import '../../quick_shoot/presentation/widgets/upload_progress_banner.dart';
 import '../../upload/presentation/upload_actions.dart';
 import '../data/mock_moments.dart';
 import '../data/mock_photos.dart';
+import '../data/repositories/photos_repository.dart';
 import '../domain/moment.dart';
 import '../domain/photo.dart';
 import 'widgets/avatar_stack.dart';
 import 'widgets/insights_view.dart';
 import 'widgets/members_view.dart';
 import 'widgets/photo_thumb.dart';
-
-const _kCurrentUser = 'Aarav';
 
 enum _Filter { all, byYou, favorites }
 
@@ -45,42 +47,137 @@ class MomentDetailScreen extends ConsumerStatefulWidget {
 class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
   _Filter _filter = _Filter.all;
 
-  List<Photo> _applyFilter(List<Photo> photos) => switch (_filter) {
-        _Filter.all => photos,
-        _Filter.byYou =>
-          photos.where((p) => p.uploader == _kCurrentUser).toList(),
-        _Filter.favorites => photos.where((p) => p.favorite).toList(),
-      };
+  /// Ids of selected (Firestore) photos — non-empty puts the grid in
+  /// multi-select mode. Pending local tiles aren't selectable (not shared yet).
+  final Set<String> _selected = {};
+  bool _bulkBusy = false;
 
-  void _openPhoto(Photo p) =>
-      context.push('/photos/${widget.code}/${p.id}');
+  List<Photo> _applyFilter(List<Photo> photos) {
+    final myUid = ref.read(authStateProvider).value?.uid;
+    return switch (_filter) {
+      _Filter.all => photos,
+      _Filter.byYou =>
+        photos.where((p) => p.uploaderId != null && p.uploaderId == myUid)
+            .toList(),
+      _Filter.favorites => photos.where((p) => p.favorite).toList(),
+    };
+  }
 
-  void _photoActions(Photo p) {
-    showModalBottomSheet(
+  void _openPhoto(Photo p) => context.push('/photos/${widget.code}/${p.id}');
+
+  void _onPhotoTap(Photo p) {
+    if (_selected.isNotEmpty) {
+      _toggleSelected(p.id);
+    } else {
+      _openPhoto(p);
+    }
+  }
+
+  void _toggleSelected(String id) => setState(() {
+        if (!_selected.remove(id)) _selected.add(id);
+      });
+
+  void _clearSelection() => setState(_selected.clear);
+
+  /// Save every selected photo to the device gallery (fetch bytes → MediaStore).
+  Future<void> _saveSelected() async {
+    final selected = ref
+        .read(momentPhotosProvider(widget.code))
+        .where((p) => _selected.contains(p.id))
+        .toList();
+    setState(() => _bulkBusy = true);
+    var ok = 0;
+    for (final p in selected) {
+      final url = (p.url != null && p.url!.isNotEmpty) ? p.url! : p.thumbUrl;
+      if (url == null || url.isEmpty) continue;
+      try {
+        final resp = await http.get(Uri.parse(url));
+        if (resp.statusCode != 200) continue;
+        final res = await ImageGallerySaverPlus.saveImage(
+          resp.bodyBytes,
+          name: 'gangroll_${p.id}',
+          quality: 100,
+        );
+        if (res is Map && res['isSuccess'] == true) ok++;
+      } catch (_) {
+        // Skip the one that failed; keep saving the rest.
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _bulkBusy = false;
+      _selected.clear();
+    });
+    _snack(ok == 0
+        ? 'Couldn’t save those photos.'
+        : 'Saved $ok photo${ok == 1 ? '' : 's'} to your gallery');
+  }
+
+  /// Delete selected photos you uploaded (rules block deleting others'). Photos
+  /// that aren't yours are skipped and reported.
+  Future<void> _deleteSelected() async {
+    final myUid = ref.read(authStateProvider).value?.uid;
+    final selected = ref
+        .read(momentPhotosProvider(widget.code))
+        .where((p) => _selected.contains(p.id))
+        .toList();
+    final mine = selected
+        .where((p) =>
+            p.eventId != null && p.uploaderId != null && p.uploaderId == myUid)
+        .toList();
+    final skipped = selected.length - mine.length;
+    if (mine.isEmpty) {
+      _snack('You can only delete photos you added.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
       context: context,
-      backgroundColor: AppTheme.cream,
-      builder: (_) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            for (final (icon, label) in const [
-              (Icons.favorite_border_rounded, 'Favorite'),
-              (Icons.download_rounded, 'Download'),
-              (Icons.ios_share_rounded, 'Share'),
-            ])
-              ListTile(
-                leading: Icon(icon, color: AppTheme.ink),
-                title: Text(label,
-                    style: Theme.of(context).textTheme.titleMedium),
-                onTap: () => Navigator.of(context).pop(),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cream,
+        title: Text('Delete ${mine.length} '
+            'photo${mine.length == 1 ? '' : 's'}?'),
+        content: const Text(
+            'They’re removed for everyone in the moment. This can’t be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(color: AppTheme.coral)),
+          ),
+        ],
       ),
     );
+    if (confirmed != true) return;
+    setState(() => _bulkBusy = true);
+    final repo = ref.read(photosRepositoryProvider);
+    var ok = 0;
+    for (final p in mine) {
+      try {
+        await repo.deletePhoto(eventId: p.eventId!, photoId: p.id);
+        ok++;
+      } catch (_) {
+        // Continue with the rest.
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _bulkBusy = false;
+      _selected.clear();
+    });
+    _snack(skipped > 0
+        ? 'Deleted $ok · skipped $skipped not yours'
+        : 'Deleted $ok photo${ok == 1 ? '' : 's'}');
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -99,63 +196,140 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
 
     final photos = ref.watch(momentPhotosProvider(widget.code));
     final filtered = _applyFilter(photos);
-    // Quick Shoot local photos (pending → uploaded). Hidden under Favorites.
+    // Quick Shoot local tiles — only shots still in flight (pending /
+    // uploading / failed). Once a shot finishes it's written to Firestore and
+    // renders from there via [photos], so we drop the uploaded local row to
+    // avoid showing the same photo twice. Hidden entirely under Favorites.
     final localPhotos = _filter == _Filter.favorites
         ? const <PendingPhoto>[]
         : (ref.watch(localPhotosProvider(widget.code)).value ??
-            const <PendingPhoto>[]);
+                const <PendingPhoto>[])
+            .where((p) => p.isOutstanding)
+            .toList();
+
+    final selecting = _selected.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppTheme.cream,
-      floatingActionButton: _UploadFab(
-        onTap: () => pickFromGallery(context, ref,
-            momentCode: moment.code, fromMoment: true),
-      ),
+      // The upload FAB steps aside while multi-selecting.
+      floatingActionButton: selecting
+          ? null
+          : _UploadFab(
+              onTap: () => pickFromGallery(context, ref,
+                  momentCode: moment.code, fromMoment: true),
+            ),
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            _GalleryHeader(
-              moment: moment,
-              onBack: () => context.pop(),
-              onInsights: () => showInsightsSheet(context, moment, photos),
-              onShare: () => context.push('/moment/${moment.code}/share'),
-              // The moment ⋮ opens THIS moment's settings only — gang-level
-              // leave/delete live on the gang screen, never here.
-              onMore: () => context.push('/moment/${moment.code}/settings'),
-            ),
-            _MemberRow(
-              moment: moment,
-              onTap: () => showMembersSheet(
-                context,
-                moment,
-                photos,
-                onInvite: () => context.push('/moment/${moment.code}/share'),
+            // Header swaps for a selection action bar while picking photos.
+            if (selecting)
+              _SelectionBar(
+                count: _selected.length,
+                busy: _bulkBusy,
+                onClose: _clearSelection,
+                onSave: _bulkBusy ? null : _saveSelected,
+                onDelete: _bulkBusy ? null : _deleteSelected,
+              )
+            else
+              _GalleryHeader(
+                moment: moment,
+                onBack: () => context.pop(),
+                onInsights: () => showInsightsSheet(context, moment, photos),
+                onShare: () => context.push('/moment/${moment.code}/share'),
+                // The moment ⋮ opens THIS moment's settings only — gang-level
+                // leave/delete live on the gang screen, never here.
+                onMore: () => context.push('/moment/${moment.code}/settings'),
               ),
-            ),
-            _FilterTabs(
-              value: _filter,
-              onChanged: (f) => setState(() => _filter = f),
-            ),
-            // Quick Shoot photos waiting to upload to this moment. Renders
-            // nothing when the queue is empty. Tapping through opens the
-            // dedicated pending view with the grey-overlay grid.
-            GestureDetector(
-              onTap: () => context.push('/pending/${moment.code}'),
-              child: UploadProgressBanner(momentId: moment.code),
-            ),
+            if (!selecting) ...[
+              _MemberRow(
+                moment: moment,
+                onTap: () => showMembersSheet(
+                  context,
+                  moment,
+                  photos,
+                  onInvite: () => context.push('/moment/${moment.code}/share'),
+                ),
+              ),
+              _FilterTabs(
+                value: _filter,
+                onChanged: (f) => setState(() => _filter = f),
+              ),
+              // Quick Shoot photos waiting to upload to this moment. Renders
+              // nothing when the queue is empty. Tapping through opens the
+              // dedicated pending view with the grey-overlay grid.
+              GestureDetector(
+                onTap: () => context.push('/pending/${moment.code}'),
+                child: UploadProgressBanner(momentId: moment.code),
+              ),
+            ],
             Expanded(
               child: (filtered.isEmpty && localPhotos.isEmpty)
                   ? _EmptyFilter(filter: _filter)
                   : _PhotoGrid(
                       localPhotos: localPhotos,
                       photos: filtered,
-                      onTap: _openPhoto,
-                      onLongPress: _photoActions,
+                      selectedIds: _selected,
+                      onTap: _onPhotoTap,
+                      onLongPress: (p) => _toggleSelected(p.id),
                     ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Contextual top bar shown while multi-selecting: count + bulk Save / Delete.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({
+    required this.count,
+    required this.busy,
+    required this.onClose,
+    required this.onSave,
+    required this.onDelete,
+  });
+
+  final int count;
+  final bool busy;
+  final VoidCallback onClose;
+  final VoidCallback? onSave;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: busy ? null : onClose,
+            icon: const Icon(Icons.close_rounded),
+            color: AppTheme.ink,
+          ),
+          Expanded(
+            child: Text(
+              '$count selected',
+              style: AppText.display(fontSize: 19),
+            ),
+          ),
+          if (busy)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppTheme.coral),
+              ),
+            )
+          else ...[
+            _HeaderIcon(icon: Icons.download_rounded, onTap: onSave ?? () {}),
+            _HeaderIcon(
+                icon: Icons.delete_outline_rounded, onTap: onDelete ?? () {}),
+          ],
+        ],
       ),
     );
   }
@@ -369,6 +543,7 @@ class _PhotoGrid extends StatelessWidget {
   const _PhotoGrid({
     required this.localPhotos,
     required this.photos,
+    required this.selectedIds,
     required this.onTap,
     required this.onLongPress,
   });
@@ -377,6 +552,9 @@ class _PhotoGrid extends StatelessWidget {
   /// pending and full colour once uploaded.
   final List<PendingPhoto> localPhotos;
   final List<Photo> photos;
+
+  /// Ids of selected photos — drives the multi-select check overlay.
+  final Set<String> selectedIds;
   final ValueChanged<Photo> onTap;
   final ValueChanged<Photo> onLongPress;
 
@@ -399,6 +577,7 @@ class _PhotoGrid extends StatelessWidget {
           );
         }
         final p = photos[i - localCount];
+        final selected = selectedIds.contains(p.id);
         return GestureDetector(
           onTap: () => onTap(p),
           onLongPress: () => onLongPress(p),
@@ -408,13 +587,28 @@ class _PhotoGrid extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 PhotoThumb(id: p.id, url: p.thumbUrl ?? p.url),
-                if (p.favorite)
+                if (p.favorite && !selected)
                   const Positioned(
                     top: 6,
                     right: 6,
                     child: Icon(Icons.favorite_rounded,
                         size: 14, color: Colors.white),
                   ),
+                if (selected) ...[
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppTheme.coral.withValues(alpha: 0.28),
+                      border: Border.all(color: AppTheme.coral, width: 3),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  const Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Icon(Icons.check_circle_rounded,
+                        size: 20, color: AppTheme.coral),
+                  ),
+                ],
               ],
             ),
           ),

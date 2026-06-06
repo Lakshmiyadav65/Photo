@@ -132,7 +132,7 @@ class _Header extends StatelessWidget {
           ),
           Expanded(
             child: Center(
-              child: Text('edit profile',
+              child: Text('Edit profile',
                   style: AppText.display(fontSize: 17)),
             ),
           ),

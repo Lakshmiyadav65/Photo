@@ -15,6 +15,7 @@ import '../../../shared/widgets/brand.dart';
 import '../../../shared/widgets/labeled_field.dart';
 import '../../onboarding/data/permissions_store.dart';
 import '../data/auth_repository.dart';
+import '../data/user_profile_repository.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -41,9 +42,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   void _toggle() => setState(() => _signUp = !_signUp);
 
-  /// After a successful sign-in / sign-up: first-time users land on the
-  /// Permissions screen; returning users go straight to /home.
-  void _afterAuth() {
+  /// After a successful sign-in / sign-up:
+  ///   • no nickname yet → the one-time profile setup (nickname → name);
+  ///   • else first-time users land on Permissions, returning users on /home.
+  Future<void> _afterAuth() async {
+    final user = ref.read(authRepositoryProvider).currentUser;
+    if (user != null) {
+      try {
+        final profile =
+            await ref.read(userProfileRepositoryProvider).fetch(user.uid);
+        if (!mounted) return;
+        if (profile == null || !profile.hasNickname) {
+          context.go('/auth/profile');
+          return;
+        }
+      } catch (_) {
+        // Profile read failed — fall through to normal routing rather than
+        // trapping the user on the auth screen.
+      }
+    }
+    if (!mounted) return;
     final completed = ref.read(permissionsProvider).value?.completed ?? false;
     context.go(completed ? '/home' : '/permissions');
   }
@@ -54,7 +72,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     setState(() => _busy = true);
     try {
       await action();
-      if (mounted) _afterAuth();
+      if (mounted) await _afterAuth();
     } on FirebaseAuthException catch (e) {
       _showError(_messageFor(e));
     } catch (_) {

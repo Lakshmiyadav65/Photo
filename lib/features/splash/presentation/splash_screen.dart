@@ -10,7 +10,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router.dart';
 import '../../../app/theme.dart';
+import '../../../shared/services/firebase_bootstrap.dart';
 import '../../../shared/widgets/brand.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../auth/data/user_profile_repository.dart';
 import '../../onboarding/data/permissions_store.dart';
 import '../../quick_shoot/data/shortcut_repository.dart';
 
@@ -58,7 +61,34 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future<void>.delayed(const Duration(milliseconds: 1600));
     if (!mounted) return;
     final onboarded = ref.read(permissionsProvider).value?.onboarded ?? false;
-    context.go(onboarded ? '/home' : '/onboarding');
+    if (!onboarded) {
+      context.go('/onboarding');
+      return;
+    }
+    // Onboarded + signed-in but no nickname yet → one-time setup before home.
+    if (await _needsProfileSetup()) {
+      if (!mounted) return;
+      context.go('/auth/profile');
+      return;
+    }
+    if (!mounted) return;
+    context.go('/home');
+  }
+
+  /// True when a signed-in user hasn't picked a nickname yet. Safe no-op when
+  /// Firebase isn't wired or nobody is signed in (preserves the old straight-to-
+  /// home path).
+  Future<bool> _needsProfileSetup() async {
+    if (ref.read(firebaseStatusProvider) != FirebaseStatus.ready) return false;
+    final user = ref.read(authRepositoryProvider).currentUser;
+    if (user == null) return false;
+    try {
+      final profile =
+          await ref.read(userProfileRepositoryProvider).fetch(user.uid);
+      return profile == null || !profile.hasNickname;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

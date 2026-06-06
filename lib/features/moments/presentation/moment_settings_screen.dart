@@ -237,7 +237,7 @@ class _Header extends StatelessWidget {
           ),
           Expanded(
             child: Center(
-              child: Text('moment settings', style: AppText.display(fontSize: 17)),
+              child: Text('Moment settings', style: AppText.display(fontSize: 17)),
             ),
           ),
           const SizedBox(width: 48),

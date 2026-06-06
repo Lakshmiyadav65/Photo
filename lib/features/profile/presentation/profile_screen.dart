@@ -10,16 +10,70 @@ import '../../../app/theme.dart';
 import '../../../shared/widgets/app_toggle.dart';
 import '../../../shared/widgets/gang_avatar.dart';
 import '../../active_moment/data/camera_shortcut_store.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../auth/data/user_profile_repository.dart';
+import '../../gangs/data/mock_gangs.dart';
+import '../../moments/data/mock_moments.dart';
 import '../../quick_shoot/presentation/shortcut_toggle_actions.dart';
 
-const _name = 'Aarav Roy';
-const _handle = "@aarav · joined nov '25";
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/// "Joined Nov '25" from the profile's createdAt (empty when unknown).
+String _joined(DateTime? t) =>
+    t == null ? '' : " · Joined ${_months[t.month - 1]} '${t.year % 100}";
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Identity + stats from the live backend (no more placeholder values).
+    final profile = ref.watch(currentUserProfileProvider).value;
+    final authUser = ref.watch(authStateProvider).value;
+    final moments = ref.watch(momentsProvider);
+    final gangs = ref.watch(gangsProvider);
+
+    final name = (profile?.displayName.trim().isNotEmpty ?? false)
+        ? profile!.displayName.trim()
+        : (authUser?.displayName?.trim().isNotEmpty ?? false)
+            ? authUser!.displayName!.trim()
+            : 'Friend';
+    final handleBase = (profile?.nickname.trim().isNotEmpty ?? false)
+        ? profile!.nickname.trim()
+        : name.split(RegExp(r'\s+')).first;
+    final handle =
+        '@${handleBase.toLowerCase().replaceAll(RegExp(r'\s+'), '')}'
+        '${_joined(profile?.createdAt)}';
+
+    final momentsCount = moments.length;
+    final photosCount =
+        moments.fold<int>(0, (sum, m) => sum + m.photoCount);
+    // Distinct friends across your gangs (excludes yourself). Gangs store the
+    // member's display name, which may be the profile name, the auth name, or
+    // the email prefix depending on when it was written — so exclude ALL of my
+    // known names, not just the profile one, to avoid counting myself.
+    final myNames = <String>{
+      name.trim().toLowerCase(),
+      if (profile != null && profile.nickname.trim().isNotEmpty)
+        profile.nickname.trim().toLowerCase(),
+      if (authUser?.displayName != null &&
+          authUser!.displayName!.trim().isNotEmpty)
+        authUser.displayName!.trim().toLowerCase(),
+      if (authUser != null && authUser.email.contains('@'))
+        authUser.email.split('@').first.trim().toLowerCase(),
+    }..removeWhere((n) => n.isEmpty);
+    final friends = <String>{};
+    for (final g in gangs) {
+      for (final member in g.members) {
+        final m = member.trim().toLowerCase();
+        if (m.isNotEmpty && !myNames.contains(m)) friends.add(m);
+      }
+    }
+    final developedCount = moments.where((m) => m.isDeveloped).length;
+
     // Off by default while the async pref loads — the persisted default is also
     // false (see camera_shortcut_store). A `?? true` here used to paint the
     // toggle ON on first render before prefs resolved, which read as "enabled by
@@ -53,21 +107,21 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const GangAvatar(name: _name, size: 88),
+                  GangAvatar(name: name, size: 88),
                   const SizedBox(height: 14),
-                  Text(_name, style: AppText.display(fontSize: 24)),
+                  Text(name, style: AppText.display(fontSize: 24)),
                   const SizedBox(height: 4),
-                  Text(_handle,
+                  Text(handle,
                       style: AppText.mono(fontSize: 12, color: AppTheme.muted)),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      _Stat(value: '14', label: 'MOMENTS'),
-                      SizedBox(width: 32),
-                      _Stat(value: '312', label: 'PHOTOS'),
-                      SizedBox(width: 32),
-                      _Stat(value: '38', label: 'GANG'),
+                    children: [
+                      _Stat(value: '$momentsCount', label: 'MOMENTS'),
+                      const SizedBox(width: 32),
+                      _Stat(value: '$photosCount', label: 'PHOTOS'),
+                      const SizedBox(width: 32),
+                      _Stat(value: '${friends.length}', label: 'GANG'),
                     ],
                   ),
                 ],
@@ -113,7 +167,9 @@ class ProfileScreen extends ConsumerWidget {
                 _MenuItem(
                   icon: Icons.calendar_today_outlined,
                   title: 'Moment history',
-                  subtitle: '14 developed moments',
+                  subtitle: developedCount == 1
+                      ? '1 developed moment'
+                      : '$developedCount developed moments',
                   onTap: () => _soon(context),
                 ),
                 _MenuItem(

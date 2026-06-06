@@ -10,6 +10,8 @@ class Photo {
     this.url,
     this.thumbUrl,
     this.isVideo = false,
+    this.eventId,
+    this.uploaderId,
   });
 
   final String id;
@@ -20,6 +22,14 @@ class Photo {
   final DateTime uploadedAt;
 
   final bool favorite;
+
+  /// Parent roll's Firestore event id — lets the viewer favorite/delete a photo
+  /// even when paging the cross-moment "All Photos" collection. Null for legacy
+  /// mock tiles.
+  final String? eventId;
+
+  /// Uid of the uploader — used to gate delete to the photo's owner (rules).
+  final String? uploaderId;
 
   /// Remote media URL (Cloudflare R2). Null for legacy gradient-placeholder
   /// tiles; when present, the UI renders the real image.
@@ -38,5 +48,7 @@ class Photo {
         url: url,
         thumbUrl: thumbUrl,
         isVideo: isVideo,
+        eventId: eventId,
+        uploaderId: uploaderId,
       );
 }

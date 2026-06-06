@@ -37,13 +37,13 @@ class _ActiveMomentPickerView extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const HeroTitle(
-          before: 'where to ',
+          before: 'Where to ',
           emphasis: 'upload?',
           fontSize: 24,
         ),
         const SizedBox(height: 4),
         Text(
-          "we'll remember your pick — switch anytime from the home chip.",
+          "We'll remember your pick — switch anytime from the home chip.",
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 18),
@@ -144,13 +144,13 @@ class _Empty extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const HeroTitle(
-          before: 'no moments ',
+          before: 'No moments ',
           emphasis: 'yet',
           fontSize: 22,
         ),
         const SizedBox(height: 6),
         Text(
-          'create or join a moment first, then come back here.',
+          'Create or join a moment first, then come back here.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium,
         ),

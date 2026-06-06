@@ -333,7 +333,7 @@ class _StepDetails extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       children: [
-        const HeroTitle(before: 'name your ', emphasis: 'moment', fontSize: 28),
+        const HeroTitle(before: 'Name your ', emphasis: 'moment', fontSize: 28),
         const SizedBox(height: 28),
         Text('TITLE', style: AppText.label()),
         const SizedBox(height: 8),
@@ -443,7 +443,7 @@ class _VibeCapsule extends StatelessWidget {
           Text(emoji, style: const TextStyle(fontSize: 15)),
           const SizedBox(width: 8),
           Text(
-            vibe ?? 'pick a vibe',
+            vibe ?? 'Pick a vibe',
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ],
@@ -477,7 +477,7 @@ class _VibeSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            const HeroTitle(before: 'pick a ', emphasis: 'vibe', fontSize: 22),
+            const HeroTitle(before: 'Pick a ', emphasis: 'vibe', fontSize: 22),
             const SizedBox(height: 18),
             Wrap(
               spacing: 10,
@@ -579,7 +579,7 @@ class _StepInvite extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       children: [
-        const HeroTitle(before: 'invite your ', emphasis: 'gang', fontSize: 28),
+        const HeroTitle(before: 'Invite your ', emphasis: 'gang', fontSize: 28),
         const SizedBox(height: 24),
         _InviteCodeCard(code: code, onCopy: () => _copyCode(context)),
         const SizedBox(height: 16),

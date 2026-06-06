@@ -30,7 +30,6 @@ import '../features/moments/presentation/members_screen.dart';
 import '../features/moments/presentation/moment_detail_screen.dart';
 import '../features/moments/presentation/moment_settings_screen.dart';
 import '../features/moments/presentation/share_screen.dart';
-import '../features/moments/data/mock_photos.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/onboarding/presentation/permissions_screen.dart';
 import '../features/photos/presentation/photo_viewer_screen.dart';
@@ -178,7 +177,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/photos/:source/:pid',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (_, state) => PhotoViewerScreen(
-          photos: photosForSource(state.pathParameters['source']!),
+          source: state.pathParameters['source']!,
           initialPhotoId: state.pathParameters['pid']!,
         ),
       ),

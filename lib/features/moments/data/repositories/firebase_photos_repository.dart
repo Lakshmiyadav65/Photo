@@ -26,8 +26,20 @@ class FirebasePhotosRepository implements PhotosRepository {
         .snapshots()
         .map((qs) => [
               for (final d in qs.docs)
-                PhotoData.fromMap(d.data(), d.id).toPhoto(),
+                PhotoData.fromMap(d.data(), d.id).toPhoto(eventId: eventId),
             ]);
+  }
+
+  @override
+  Stream<Photo?> watchCoverPhoto(String eventId) {
+    return _photos(eventId)
+        .orderBy('uploadedAt') // ascending → first uploaded (oldest) shot
+        .limit(1)
+        .snapshots()
+        .map((qs) => qs.docs.isEmpty
+            ? null
+            : PhotoData.fromMap(qs.docs.first.data(), qs.docs.first.id)
+                .toPhoto(eventId: eventId));
   }
 
   @override

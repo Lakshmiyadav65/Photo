@@ -52,7 +52,7 @@ class PhotoData {
         if (uploadedAt != null) 'uploadedAt': Timestamp.fromDate(uploadedAt!),
       };
 
-  Photo toPhoto() => Photo(
+  Photo toPhoto({String? eventId}) => Photo(
         id: id,
         uploader: uploaderName,
         uploadedAt: uploadedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -60,5 +60,7 @@ class PhotoData {
         url: url,
         thumbUrl: thumbUrl ?? url,
         isVideo: isVideo,
+        eventId: eventId,
+        uploaderId: uploaderId,
       );
 }

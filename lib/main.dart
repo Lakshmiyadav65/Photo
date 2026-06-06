@@ -13,6 +13,8 @@ import 'app/app.dart';
 import 'core/constants.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/data/firebase_auth_repository.dart';
+import 'features/auth/data/firebase_user_profile_repository.dart';
+import 'features/auth/data/user_profile_repository.dart';
 import 'features/gangs/data/repositories/firebase_gangs_repository.dart';
 import 'features/gangs/data/repositories/gangs_repository.dart';
 import 'features/moments/data/repositories/events_repository.dart';
@@ -52,6 +54,10 @@ Future<void> main() async {
         if (firebaseStatus == FirebaseStatus.ready)
           photosRepositoryProvider.overrideWithValue(
             FirebasePhotosRepository(FirebaseFirestore.instance),
+          ),
+        if (firebaseStatus == FirebaseStatus.ready)
+          userProfileRepositoryProvider.overrideWithValue(
+            FirebaseUserProfileRepository(FirebaseFirestore.instance),
           ),
         // Real uploader only once the Worker URL is configured; otherwise the
         // simulated uploader keeps the app usable.

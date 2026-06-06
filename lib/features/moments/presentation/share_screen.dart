@@ -125,7 +125,7 @@ class _Header extends StatelessWidget {
           Expanded(
             child: Center(
               child:
-                  Text('invite to moment', style: AppText.display(fontSize: 17)),
+                  Text('Invite to moment', style: AppText.display(fontSize: 17)),
             ),
           ),
           const SizedBox(width: 48),

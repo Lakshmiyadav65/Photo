@@ -97,7 +97,7 @@ class _MemberRow extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('joined $joined',
+                Text('Joined $joined',
                     style: AppText.mono(fontSize: 10, color: AppTheme.muted)),
               ],
             ),

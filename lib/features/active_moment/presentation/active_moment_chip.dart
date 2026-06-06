@@ -55,7 +55,7 @@ class ActiveMomentChip extends ConsumerWidget {
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 160),
                   child: Text(
-                    hasActive ? active.title : 'pick a moment',
+                    hasActive ? active.title : 'Pick a moment',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(

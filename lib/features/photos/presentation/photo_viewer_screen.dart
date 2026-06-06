@@ -1,25 +1,32 @@
 // Screen 2 · Fullscreen Photo Viewer — immersive, warm-charcoal (not pure
 // black). Top bar shows the uploader; the image supports swipe between photos
-// and pinch-zoom; a minimal icon row handles favorite/download/share/more.
+// and pinch-zoom; an icon row handles favorite / download / share / delete.
 //
-// THE single shared viewer for the whole app. It's deliberately decoupled from
-// any one source: callers hand it a photo collection + the photo to open, and
-// the experience is identical whether that list came from a moment, All Photos,
-// favorites, search, or a gang. Only the contents of [photos] differ.
+// THE single shared viewer for the whole app. It's decoupled from any one
+// source: it's handed a [source] key ('all' → the cross-moment All Photos
+// collection, otherwise a moment code) + the photo to open first, and resolves
+// the live Firestore list itself so favorites/deletes reflect instantly.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../app/theme.dart';
 import '../../../shared/widgets/gang_avatar.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../moments/data/mock_photos.dart';
+import '../../moments/data/repositories/photos_repository.dart';
 import '../../moments/domain/photo.dart';
 import '../../moments/presentation/widgets/photo_thumb.dart';
 
 const Color _charcoal = Color(0xFF1C1A17);
 
 String _ago(DateTime t) {
+  if (t.millisecondsSinceEpoch <= 0) return '';
   final d = DateTime.now().difference(t);
   if (d.inDays >= 1) return '${d.inDays}d ago';
   if (d.inHours >= 1) return '${d.inHours}h ago';
@@ -27,41 +34,39 @@ String _ago(DateTime t) {
   return 'just now';
 }
 
-class PhotoViewerScreen extends StatefulWidget {
+class PhotoViewerScreen extends ConsumerStatefulWidget {
   const PhotoViewerScreen({
     super.key,
-    required this.photos,
+    required this.source,
     required this.initialPhotoId,
   });
 
-  /// The collection to page through. The source (a moment, All Photos,
-  /// favorites, search results, a gang, …) only decides what's in this list —
-  /// the viewing experience itself is identical everywhere.
-  final List<Photo> photos;
+  /// 'all' → the All Photos collection; any other value is a moment code. Only
+  /// decides what's in the list — the viewing experience is identical.
+  final String source;
 
   /// Id of the photo to open first.
   final String initialPhotoId;
 
   @override
-  State<PhotoViewerScreen> createState() => _PhotoViewerScreenState();
+  ConsumerState<PhotoViewerScreen> createState() => _PhotoViewerScreenState();
 }
 
-class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
-  late final List<Photo> _photos;
+class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
   late final PageController _page;
-  late int _index;
-  final _favorites = <String>{};
+  int _index = 0;
+  bool _saving = false;
+
+  List<Photo> _read() => widget.source == 'all'
+      ? ref.read(allPhotosProvider)
+      : ref.read(momentPhotosProvider(widget.source));
 
   @override
   void initState() {
     super.initState();
-    _photos = widget.photos;
-    final start = _photos.indexWhere((p) => p.id == widget.initialPhotoId);
+    final start = _read().indexWhere((p) => p.id == widget.initialPhotoId);
     _index = start < 0 ? 0 : start;
     _page = PageController(initialPage: _index);
-    for (final p in _photos) {
-      if (p.favorite) _favorites.add(p.id);
-    }
   }
 
   @override
@@ -71,14 +76,95 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
   }
 
   void _toast(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Hands the OS its native share sheet (WhatsApp, Instagram, Drive, …). The
-  /// real impl will attach the photo file; for the frontend mock we share a
-  /// descriptive text + a permalink shape so the flow is end-to-end.
+  Future<void> _toggleFavorite(Photo p) async {
+    if (p.eventId == null) return;
+    HapticFeedback.selectionClick();
+    try {
+      await ref.read(photosRepositoryProvider).toggleFavorite(
+            eventId: p.eventId!,
+            photoId: p.id,
+            favorite: !p.favorite,
+          );
+    } catch (_) {
+      _toast('Couldn’t update favorite.');
+    }
+  }
+
+  Future<void> _download(Photo p) async {
+    if (_saving) return;
+    final url = (p.url != null && p.url!.isNotEmpty) ? p.url! : p.thumbUrl;
+    if (url == null || url.isEmpty) {
+      _toast('Nothing to save yet.');
+      return;
+    }
+    setState(() => _saving = true);
+    _toast('Saving…');
+    try {
+      final resp = await http.get(Uri.parse(url));
+      if (resp.statusCode != 200) throw Exception('HTTP ${resp.statusCode}');
+      final res = await ImageGallerySaverPlus.saveImage(
+        resp.bodyBytes,
+        name: 'gangroll_${p.id}',
+        quality: 100,
+      );
+      final ok = res is Map && (res['isSuccess'] == true);
+      _toast(ok ? 'Saved to your gallery' : 'Couldn’t save the photo.');
+    } catch (_) {
+      _toast('Couldn’t save the photo.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _delete(Photo p) async {
+    final me = ref.read(authStateProvider).value?.uid;
+    if (p.eventId == null) {
+      _toast('This photo can’t be deleted.');
+      return;
+    }
+    // Firestore rules only allow the uploader to delete — fail kindly otherwise.
+    if (me == null || p.uploaderId == null || me != p.uploaderId) {
+      _toast('You can only delete photos you added.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cream,
+        title: const Text('Delete this photo?'),
+        content: const Text(
+            'It’s removed for everyone in the moment. This can’t be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(color: AppTheme.coral)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(photosRepositoryProvider).deletePhoto(
+            eventId: p.eventId!,
+            photoId: p.id,
+          );
+      _toast('Photo deleted.');
+    } catch (_) {
+      _toast('Couldn’t delete the photo.');
+    }
+  }
+
   Future<void> _shareCurrent(Photo p) async {
     HapticFeedback.selectionClick();
     final box = context.findRenderObject() as RenderBox?;
@@ -95,11 +181,31 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_photos.isEmpty) {
-      return const Scaffold(backgroundColor: _charcoal, body: SizedBox.shrink());
+    final photos = widget.source == 'all'
+        ? ref.watch(allPhotosProvider)
+        : ref.watch(momentPhotosProvider(widget.source));
+
+    if (photos.isEmpty) {
+      // Last photo deleted (or nothing to show) → leave the viewer.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.pop();
+      });
+      return const Scaffold(
+          backgroundColor: _charcoal, body: SizedBox.shrink());
     }
-    final current = _photos[_index];
-    final isFav = _favorites.contains(current.id);
+
+    // Keep the index (and the controller) in range as the list shrinks.
+    if (_index > photos.length - 1) {
+      _index = photos.length - 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _page.hasClients) _page.jumpToPage(_index);
+      });
+    }
+
+    final current = photos[_index];
+    final myUid = ref.watch(authStateProvider).value?.uid;
+    final canDelete = current.uploaderId != null && current.uploaderId == myUid;
+    final favCount = photos.where((p) => p.favorite).length;
 
     return Scaffold(
       backgroundColor: _charcoal,
@@ -111,9 +217,9 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
               child: PageView.builder(
                 controller: _page,
                 onPageChanged: (i) => setState(() => _index = i),
-                itemCount: _photos.length,
+                itemCount: photos.length,
                 itemBuilder: (_, i) {
-                  final p = _photos[i];
+                  final p = photos[i];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Center(
@@ -123,7 +229,8 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
                           borderRadius: BorderRadius.circular(10),
                           child: AspectRatio(
                             aspectRatio: 0.82,
-                            child: PhotoThumb(id: p.id),
+                            child: PhotoThumb(
+                                id: p.id, url: p.url ?? p.thumbUrl),
                           ),
                         ),
                       ),
@@ -133,17 +240,14 @@ class _PhotoViewerScreenState extends State<PhotoViewerScreen> {
               ),
             ),
             _BottomActions(
-              favorite: isFav,
-              favoriteCount: _favorites.length,
-              onFavorite: () {
-                HapticFeedback.selectionClick();
-                setState(() {
-                  isFav ? _favorites.remove(current.id) : _favorites.add(current.id);
-                });
-              },
+              favorite: current.favorite,
+              favoriteCount: favCount,
+              canDelete: canDelete,
+              saving: _saving,
+              onFavorite: () => _toggleFavorite(current),
               onShare: () => _shareCurrent(current),
-              onDownload: () => _toast('Download coming soon'),
-              onMore: () => _toast('More options coming soon'),
+              onDownload: () => _download(current),
+              onDelete: () => _delete(current),
             ),
           ],
         ),
@@ -160,6 +264,7 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ago = _ago(photo.uploadedAt);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
       child: Row(
@@ -177,13 +282,14 @@ class _TopBar extends StatelessWidget {
                       .titleMedium
                       ?.copyWith(color: Colors.white),
                 ),
-                Text(
-                  _ago(photo.uploadedAt),
-                  style: AppText.mono(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.6),
+                if (ago.isNotEmpty)
+                  Text(
+                    ago,
+                    style: AppText.mono(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -202,18 +308,22 @@ class _BottomActions extends StatelessWidget {
   const _BottomActions({
     required this.favorite,
     required this.favoriteCount,
+    required this.canDelete,
+    required this.saving,
     required this.onFavorite,
     required this.onShare,
     required this.onDownload,
-    required this.onMore,
+    required this.onDelete,
   });
 
   final bool favorite;
   final int favoriteCount;
+  final bool canDelete;
+  final bool saving;
   final VoidCallback onFavorite;
   final VoidCallback onShare;
   final VoidCallback onDownload;
-  final VoidCallback onMore;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -223,14 +333,25 @@ class _BottomActions extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _Action(
-            icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+            icon: favorite
+                ? Icons.favorite_rounded
+                : Icons.favorite_border_rounded,
             color: favorite ? AppTheme.coral : Colors.white,
             label: '$favoriteCount',
             onTap: onFavorite,
           ),
-          _Action(icon: Icons.download_rounded, onTap: onDownload),
+          _Action(
+            icon: saving ? Icons.hourglass_top_rounded : Icons.download_rounded,
+            onTap: onDownload,
+          ),
           _Action(icon: Icons.ios_share_rounded, onTap: onShare),
-          _Action(icon: Icons.more_horiz_rounded, onTap: onMore),
+          _Action(
+            icon: Icons.delete_outline_rounded,
+            color: canDelete
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.35),
+            onTap: onDelete,
+          ),
         ],
       ),
     );

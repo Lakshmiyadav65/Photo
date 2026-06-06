@@ -9,17 +9,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../app/theme.dart';
 import '../../../shared/widgets/brand.dart';
+import '../../auth/data/user_profile_repository.dart';
 import '../data/mock_moments.dart';
 import 'widgets/moment_card.dart';
 import 'widgets/quick_actions.dart';
-
-// Current user — hardcoded until auth lands. Phase 3 sources this from the
-// signed-in user doc.
-const _userName = 'Aarav';
-
-// Friendlier than time-based greetings — the dashboard now reads warm and
-// relaxed regardless of when the user opens the app.
-const _greeting = 'Hi,';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -27,6 +20,10 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final moments = ref.watch(visibleMomentsProvider);
+    // The greeting uses the user's chosen nickname (falls back to the first
+    // name, then a friendly default while the profile loads).
+    final greetingName =
+        ref.watch(currentUserProfileProvider).value?.greetingName ?? 'there';
 
     return Scaffold(
       backgroundColor: AppTheme.cream,
@@ -41,8 +38,8 @@ class HomeScreen extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 32, 24, 22),
               child: HeroTitle(
-                before: '$_greeting ',
-                emphasis: _userName,
+                before: 'Hi, ',
+                emphasis: greetingName,
                 fontSize: 28,
               ),
             ),
@@ -106,7 +103,7 @@ class _EmptyRolls extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'no moments yet',
+            'No moments yet',
             style: GoogleFonts.bricolageGrotesque(
               fontSize: 22,
               fontWeight: FontWeight.w600,
@@ -115,7 +112,7 @@ class _EmptyRolls extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'create your first moment or join one\nyour gang has started.',
+            'Create your first moment or join one\nyour gang has started.',
             style: Theme.of(context).textTheme.bodyMedium,
             textAlign: TextAlign.center,
           ),

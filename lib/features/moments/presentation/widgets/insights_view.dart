@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme.dart';
 import '../../../../shared/widgets/brand.dart';
 import '../../../../shared/widgets/gang_avatar.dart';
-import '../../data/mock_photos.dart';
 import '../../domain/moment.dart';
 import '../../domain/photo.dart';
 import 'sheet_scaffold.dart';
@@ -20,8 +19,20 @@ Future<void> showInsightsSheet(
   return showAppSheet(context, InsightsView(moment: moment, photos: photos));
 }
 
-String _compact(int n) =>
-    n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}K' : '$n';
+/// Real elapsed span of the roll: earliest → latest shot. '—' until there are
+/// at least two timestamped photos to measure between.
+String _durationLabel(List<Photo> photos) {
+  final times = [
+    for (final p in photos)
+      if (p.uploadedAt.millisecondsSinceEpoch > 0) p.uploadedAt,
+  ]..sort();
+  if (times.length < 2) return '—';
+  final span = times.last.difference(times.first);
+  if (span.inDays >= 1) return '${span.inDays} ${span.inDays == 1 ? 'day' : 'days'}';
+  if (span.inHours >= 1) return '${span.inHours} ${span.inHours == 1 ? 'hr' : 'hrs'}';
+  if (span.inMinutes >= 1) return '${span.inMinutes} min';
+  return '< 1 min';
+}
 
 class InsightsView extends StatelessWidget {
   const InsightsView({super.key, required this.moment, required this.photos});
@@ -48,7 +59,7 @@ class InsightsView extends StatelessWidget {
           children: [
             const Expanded(
               child: HeroTitle(
-                before: 'the moment, in ',
+                before: 'The moment, in ',
                 emphasis: 'numbers',
                 fontSize: 24,
               ),
@@ -69,9 +80,9 @@ class InsightsView extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _StatCard(label: 'DOWNLOADS', value: _compact(mockDownloads(moment)))),
+            Expanded(child: _StatCard(label: 'MEMBERS', value: '${moment.memberCount}')),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: 'DURATION', value: '${mockDurationDays(moment)} days')),
+            Expanded(child: _StatCard(label: 'DURATION', value: _durationLabel(photos))),
           ],
         ),
         const SizedBox(height: 26),

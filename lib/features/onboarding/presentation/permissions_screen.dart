@@ -41,7 +41,7 @@ class PermissionsScreen extends ConsumerWidget {
                   Text('ONE MORE THING', style: AppText.label(fontSize: 11)),
                   const SizedBox(height: 10),
                   const HeroTitle(
-                    before: 'a couple ',
+                    before: 'A couple ',
                     emphasis: 'permissions',
                     fontSize: 28,
                   ),
