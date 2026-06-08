@@ -19,6 +19,15 @@ abstract interface class PhotoUploader {
     PendingPhoto photo, {
     void Function(double progress)? onProgress,
   });
+
+  /// Best-effort cleanup of a deleted photo's R2 objects (full image + thumb) so
+  /// storage doesn't grow forever. Called AFTER the Firestore doc delete (the
+  /// authoritative, rules-gated step); failures here only leave an orphan, never
+  /// block the delete. [keys] are R2 object keys; nulls are ignored.
+  Future<void> deleteMedia({
+    required String eventId,
+    required List<String?> keys,
+  });
 }
 
 /// Simulated uploader used until Firebase Storage is wired. Ramps progress over
@@ -38,6 +47,14 @@ class MockPhotoUploader implements PhotoUploader {
     onProgress?.call(1);
     // Stand-in for the real R2 URL.
     return 'mock://uploaded/${photo.momentId}/${photo.id}.jpg';
+  }
+
+  @override
+  Future<void> deleteMedia({
+    required String eventId,
+    required List<String?> keys,
+  }) async {
+    // No real storage behind the mock — nothing to clean up.
   }
 }
 

@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../auth/data/auth_repository.dart';
+import '../../domain/activity.dart';
 import '../../domain/moment.dart';
+import '../models/activity_data.dart';
 import '../models/event_data.dart';
 import 'events_repository.dart';
 
@@ -27,6 +29,16 @@ class FirebaseEventsRepository implements EventsRepository {
       (u.displayName != null && u.displayName!.trim().isNotEmpty)
           ? u.displayName!.trim()
           : u.email.split('@').first;
+
+  /// Append an entry to a roll's activity feed. Best-effort: the feed is a nicety
+  /// (it stands in for push), so a failure here must never sink the create/join.
+  Future<void> _logActivity(String eventId, ActivityData a) async {
+    try {
+      await _events.doc(eventId).collection('activity').add(a.toMap());
+    } catch (_) {
+      // Activity is non-critical — swallow.
+    }
+  }
 
   @override
   Stream<List<Moment>> watchMyEvents(String uid) {
@@ -54,13 +66,16 @@ class FirebaseEventsRepository implements EventsRepository {
     required String title,
     required String code,
     String? vibe,
+    DateTime? endsAt,
   }) async {
     final hostName = _nameOf(host);
     final upper = code.toUpperCase();
     final now = Timestamp.now();
     final eventRef = _events.doc(); // auto-id
 
-    // 1. Event first (host = sole member) — satisfies the create rule.
+    // 1. Event first (host = sole member) — satisfies the create rule. An
+    //    `endsAt` (the develop-lock deadline) is an allowed extra field on
+    //    create; absent means an open album (no lock).
     await eventRef.set({
       'title': title,
       'code': upper,
@@ -74,6 +89,7 @@ class FirebaseEventsRepository implements EventsRepository {
       'photoCount': 0,
       'viewCount': 0,
       'vibe': ?vibe,
+      if (endsAt != null) 'endsAt': Timestamp.fromDate(endsAt),
       'createdAt': FieldValue.serverTimestamp(),
       'lastActiveAt': now,
     });
@@ -88,16 +104,33 @@ class FirebaseEventsRepository implements EventsRepository {
       'createdAt': FieldValue.serverTimestamp(),
     });
 
+    // 3. Seed the activity feed (host is already a member → passes the rule).
+    await _logActivity(
+      eventRef.id,
+      ActivityData(
+        type: ActivityType.created,
+        actorId: host.uid,
+        actorName: hostName,
+        at: now.toDate(),
+      ),
+    );
+
+    // A freshly-created roll with a future `endsAt` is Live (locked); otherwise
+    // (no end, or a past date) it's already developed.
+    final developed = endsAt == null || !DateTime.now().isBefore(endsAt);
     return Moment(
       id: eventRef.id,
       title: title,
       code: upper,
-      state: RollState.live,
+      hostId: host.uid,
+      state: developed ? RollState.developed : RollState.live,
       photoCount: 0,
       memberCount: 1,
       members: [hostName],
       vibe: vibe,
       lastActiveAt: now.toDate(),
+      endsAt: endsAt,
+      developedAt: developed ? endsAt : null,
     );
   }
 
@@ -137,7 +170,16 @@ class FirebaseEventsRepository implements EventsRepository {
       'lastActiveAt': Timestamp.now(),
     });
 
-    // Now a member — safe to read it back.
+    // Now a member — log the join (passes the rule) and read the roll back.
+    await _logActivity(
+      eventId,
+      ActivityData(
+        type: ActivityType.joined,
+        actorId: user.uid,
+        actorName: _nameOf(user),
+        at: DateTime.now(),
+      ),
+    );
     final snap = await _events.doc(eventId).get();
     return EventData.fromMap(snap.data()!, snap.id).toMoment();
   }
@@ -171,5 +213,18 @@ class FirebaseEventsRepository implements EventsRepository {
   @override
   Future<void> bumpActivity(String eventId) async {
     await _events.doc(eventId).update({'lastActiveAt': Timestamp.now()});
+  }
+
+  @override
+  Future<void> incrementViewCount(String eventId) async {
+    // viewCount alone — the rules' `onlyCounterBump` allows a member this write.
+    await _events.doc(eventId).update({'viewCount': FieldValue.increment(1)});
+  }
+
+  @override
+  Future<void> developNow(String eventId) async {
+    // Pull the develop deadline to now → the roll reveals immediately. Only the
+    // host may write `endsAt` (the rules' host branch); a member's attempt fails.
+    await _events.doc(eventId).update({'endsAt': Timestamp.now()});
   }
 }

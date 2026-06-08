@@ -17,6 +17,11 @@ class AppConstants {
   // Photo upload constraints per spec TRD.
   static const int maxPhotoDimensionPx = 1920;
   static const int photoJpegQuality = 85;
+
+  // Grid thumbnail: a small, cheap variant uploaded alongside the full image so
+  // the photo grids don't pull full-resolution bytes. Always JPEG.
+  static const int thumbnailDimensionPx = 480;
+  static const int thumbnailJpegQuality = 60;
   static const int maxPhotosPerMomentV1 = 500;
   static const int maxPhotoSizeBytes = 10 * 1024 * 1024; // 10 MB
   static const int maxAvatarSizeBytes = 5 * 1024 * 1024; // 5 MB

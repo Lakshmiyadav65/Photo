@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gang_roll/features/auth/domain/user_profile.dart';
 import 'package:gang_roll/features/gangs/data/models/gang_data.dart';
+import 'package:gang_roll/features/moments/data/models/activity_data.dart';
 import 'package:gang_roll/features/moments/data/models/event_data.dart';
 import 'package:gang_roll/features/moments/data/models/photo_data.dart';
+import 'package:gang_roll/features/moments/domain/activity.dart';
+import 'package:gang_roll/features/moments/domain/moment.dart';
 
 void main() {
   group('Firestore model mappers round-trip', () {
@@ -43,6 +46,37 @@ void main() {
       expect(moment.coverUrlOverride, isNull);
     });
 
+    test('endsAt round-trips and drives develop-lock state', () {
+      EventData withEnd(DateTime? endsAt) => EventData(
+            id: 'e',
+            title: 't',
+            code: 'C',
+            hostId: 'u1',
+            hostName: 'A',
+            members: const [EventMember(uid: 'u1', name: 'A', role: 'host')],
+            endsAt: endsAt,
+          );
+
+      // Future endsAt → Live (locked); survives a Firestore round-trip.
+      final future = withEnd(DateTime.now().add(const Duration(days: 1)));
+      final roundFuture = EventData.fromMap(future.toMap(), 'e');
+      expect(roundFuture.endsAt, isNotNull);
+      expect(roundFuture.toMoment().state, RollState.live);
+      expect(roundFuture.toMoment().isLive, isTrue);
+
+      // Past endsAt → Developed (revealed); developedAt is set.
+      final past = withEnd(DateTime.now().subtract(const Duration(days: 1)));
+      final moment = EventData.fromMap(past.toMap(), 'e').toMoment();
+      expect(moment.state, RollState.developed);
+      expect(moment.developedAt, isNotNull);
+
+      // No endsAt → open album, treated as developed (visible), no developedAt.
+      final openMoment = withEnd(null).toMoment();
+      expect(openMoment.state, RollState.developed);
+      expect(openMoment.endsAt, isNull);
+      expect(openMoment.developedAt, isNull);
+    });
+
     test('memberIds derives from members', () {
       const event = EventData(
         id: 'e',
@@ -64,6 +98,7 @@ void main() {
         url: 'https://media.x/events/e/p1.jpg',
         thumbUrl: 'https://media.x/events/e/p1_thumb.jpg',
         storageKey: 'events/e/p1.jpg',
+        thumbStorageKey: 'events/e/p1_thumb.jpg',
         favorite: true,
         uploadedAt: at,
       );
@@ -72,13 +107,44 @@ void main() {
       expect(round.uploaderName, 'Diya');
       expect(round.url, photo.url);
       expect(round.thumbUrl, photo.thumbUrl);
+      expect(round.storageKey, 'events/e/p1.jpg');
+      expect(round.thumbStorageKey, 'events/e/p1_thumb.jpg');
       expect(round.favorite, isTrue);
       expect(round.uploadedAt!.isAtSameMomentAs(at), isTrue);
 
+      // Storage keys flow through to the UI type so the owner's delete can clean
+      // up the R2 objects.
       final ui = round.toPhoto();
       expect(ui.uploader, 'Diya');
       expect(ui.favorite, isTrue);
+      expect(ui.storageKey, 'events/e/p1.jpg');
+      expect(ui.thumbStorageKey, 'events/e/p1_thumb.jpg');
       expect(ui.uploadedAt.isAtSameMomentAs(at), isTrue);
+    });
+
+    test('ActivityData round-trips and maps to Activity', () {
+      final at = DateTime.utc(2026, 4, 5, 14, 20);
+      final activity = ActivityData(
+        type: ActivityType.uploaded,
+        actorId: 'u2',
+        actorName: 'Diya',
+        at: at,
+      );
+
+      final round = ActivityData.toActivity(activity.toMap(), 'a1');
+      expect(round.id, 'a1');
+      expect(round.type, ActivityType.uploaded);
+      expect(round.actorId, 'u2');
+      expect(round.actorName, 'Diya');
+      expect(round.at.isAtSameMomentAs(at), isTrue);
+    });
+
+    test('ActivityData.typeFrom maps known + unknown types', () {
+      expect(ActivityData.typeFrom('created'), ActivityType.created);
+      expect(ActivityData.typeFrom('joined'), ActivityType.joined);
+      expect(ActivityData.typeFrom('uploaded'), ActivityType.uploaded);
+      expect(ActivityData.typeFrom('something_new'), ActivityType.unknown);
+      expect(ActivityData.typeFrom(null), ActivityType.unknown);
     });
 
     test('GangData round-trips and maps to Gang', () {

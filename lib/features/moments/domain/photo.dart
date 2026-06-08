@@ -12,6 +12,8 @@ class Photo {
     this.isVideo = false,
     this.eventId,
     this.uploaderId,
+    this.storageKey,
+    this.thumbStorageKey,
   });
 
   final String id;
@@ -38,6 +40,13 @@ class Photo {
   /// Smaller variant for grids; falls back to [url] when null.
   final String? thumbUrl;
 
+  /// R2 object key of the full image — lets the owner's delete also clean up the
+  /// stored bytes (out-of-band, via the upload Worker). Null for legacy tiles.
+  final String? storageKey;
+
+  /// R2 object key of the grid thumbnail, when one was uploaded.
+  final String? thumbStorageKey;
+
   final bool isVideo;
 
   Photo copyWith({bool? favorite}) => Photo(
@@ -50,5 +59,7 @@ class Photo {
         isVideo: isVideo,
         eventId: eventId,
         uploaderId: uploaderId,
+        storageKey: storageKey,
+        thumbStorageKey: thumbStorageKey,
       );
 }

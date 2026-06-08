@@ -14,6 +14,7 @@ class PhotoData {
     required this.url,
     this.thumbUrl,
     this.storageKey,
+    this.thumbStorageKey,
     this.isVideo = false,
     this.favorite = false,
     this.uploadedAt,
@@ -24,7 +25,12 @@ class PhotoData {
   final String uploaderName;
   final String url;
   final String? thumbUrl;
+
+  /// R2 object key of the full image (for out-of-band cleanup on delete).
   final String? storageKey;
+
+  /// R2 object key of the grid thumbnail, when one was uploaded.
+  final String? thumbStorageKey;
   final bool isVideo;
   final bool favorite;
   final DateTime? uploadedAt;
@@ -36,6 +42,7 @@ class PhotoData {
         url: (data['url'] ?? '') as String,
         thumbUrl: data['thumbUrl'] as String?,
         storageKey: data['storageKey'] as String?,
+        thumbStorageKey: data['thumbStorageKey'] as String?,
         isVideo: (data['isVideo'] ?? false) as bool,
         favorite: (data['favorite'] ?? false) as bool,
         uploadedAt: dateFromFirestore(data['uploadedAt']),
@@ -47,6 +54,7 @@ class PhotoData {
         'url': url,
         if (thumbUrl != null) 'thumbUrl': thumbUrl,
         if (storageKey != null) 'storageKey': storageKey,
+        if (thumbStorageKey != null) 'thumbStorageKey': thumbStorageKey,
         'isVideo': isVideo,
         'favorite': favorite,
         if (uploadedAt != null) 'uploadedAt': Timestamp.fromDate(uploadedAt!),
@@ -62,5 +70,7 @@ class PhotoData {
         isVideo: isVideo,
         eventId: eventId,
         uploaderId: uploaderId,
+        storageKey: storageKey,
+        thumbStorageKey: thumbStorageKey,
       );
 }

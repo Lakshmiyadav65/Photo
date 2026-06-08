@@ -15,12 +15,14 @@ abstract class EventsRepository {
 
   /// Create a roll with the given (already-displayed) join code. Returns the
   /// new [Moment]. The caller generates the code so it can be shared before the
-  /// roll is persisted.
+  /// roll is persisted. [endsAt] sets the develop-lock deadline — when non-null
+  /// the roll is Live (photos locked) until then; null is an open album.
   Future<Moment> createEvent({
     required AuthUser host,
     required String title,
     required String code,
     String? vibe,
+    DateTime? endsAt,
   });
 
   /// Resolve a share code to a lightweight preview WITHOUT joining — backed by
@@ -39,6 +41,15 @@ abstract class EventsRepository {
   /// Stamp the roll as recently active (e.g. after an upload) so the dashboard
   /// re-sorts it to the top.
   Future<void> bumpActivity(String eventId);
+
+  /// Develop the roll right now — sets `endsAt` to the current time so a Live
+  /// roll reveals its photos immediately. Host-only (enforced by the rules).
+  Future<void> developNow(String eventId);
+
+  /// Bump the roll's `viewCount` by one (a member opened its gallery). Counted
+  /// once per roll per app session by the caller. Deliberately does NOT touch
+  /// `lastActiveAt` — viewing shouldn't resurface a roll on the dashboard.
+  Future<void> incrementViewCount(String eventId);
 }
 
 /// Thrown by [EventsRepository.joinByCode] when no roll matches the code.

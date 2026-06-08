@@ -29,10 +29,12 @@ class EventMember {
 
 /// The `events/{id}` Firestore document (a roll). Maps to the UI [Moment].
 ///
-/// Simple-album model: no develop-lock / timer / shot quota — every roll is
-/// treated as [RollState.live]. `memberIds` (a flat uid array) is stored
-/// alongside `members` so the dashboard query and security rules can use
-/// `arrayContains` / `in`.
+/// Develop-lock model: an optional [endsAt] gives a roll a film lifecycle —
+/// while `now < endsAt` it's [RollState.live] (photos locked; reads blocked by
+/// the rules); at/after [endsAt] it's [RollState.developed] (revealed). A null
+/// [endsAt] is an open album: always developed, no lock. `memberIds` (a flat uid
+/// array) is stored alongside `members` so the dashboard query and security
+/// rules can use `arrayContains` / `in`.
 class EventData {
   const EventData({
     required this.id,
@@ -47,6 +49,7 @@ class EventData {
     this.viewCount = 0,
     this.createdAt,
     this.lastActiveAt,
+    this.endsAt,
   });
 
   final String id;
@@ -61,6 +64,9 @@ class EventData {
   final int viewCount;
   final DateTime? createdAt;
   final DateTime? lastActiveAt;
+
+  /// When this roll develops (photos reveal). Null = open album, no lock.
+  final DateTime? endsAt;
 
   List<String> get memberIds => [for (final m in members) m.uid];
 
@@ -80,6 +86,7 @@ class EventData {
         viewCount: (data['viewCount'] ?? 0) as int,
         createdAt: dateFromFirestore(data['createdAt']),
         lastActiveAt: dateFromFirestore(data['lastActiveAt']),
+        endsAt: dateFromFirestore(data['endsAt']),
       );
 
   Map<String, dynamic> toMap() => {
@@ -97,19 +104,26 @@ class EventData {
         if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
         if (lastActiveAt != null)
           'lastActiveAt': Timestamp.fromDate(lastActiveAt!),
+        if (endsAt != null) 'endsAt': Timestamp.fromDate(endsAt!),
       };
 
   /// Map to the UI domain type. Host is ordered first (drives the avatar strip).
+  ///
+  /// Develop state is DERIVED from [endsAt] vs the current time: a roll with no
+  /// end time (or whose end time has passed) is [RollState.developed] (visible);
+  /// one whose end time is still ahead is [RollState.live] (locked).
   Moment toMoment() {
     final ordered = [
       for (final m in members) if (m.isHost) m,
       for (final m in members) if (!m.isHost) m,
     ];
+    final developed = endsAt == null || !DateTime.now().isBefore(endsAt!);
     return Moment(
       id: id,
       title: title,
       code: code,
-      state: RollState.live,
+      hostId: hostId,
+      state: developed ? RollState.developed : RollState.live,
       photoCount: photoCount,
       memberCount: members.length,
       members: [for (final m in ordered) m.name],
@@ -117,6 +131,8 @@ class EventData {
       viewCount: viewCount,
       lastActiveAt: lastActiveAt,
       coverUrlOverride: coverUrl,
+      endsAt: endsAt,
+      developedAt: developed ? endsAt : null,
     );
   }
 }

@@ -139,12 +139,18 @@ class _CreateRollFlowState extends ConsumerState<CreateRollFlow> {
     }
     // Note: invitees join via the code (the create rule seeds only the host),
     // so prefilledMembers from a Gang launch aren't seeded here.
+    // An END date arms the develop-lock: the roll stays Live (photos locked)
+    // until the end of that day. No END date → open album (no lock).
+    final endsAt = _endDate == null
+        ? null
+        : DateTime(_endDate!.year, _endDate!.month, _endDate!.day, 23, 59, 59);
     try {
       await ref.read(eventsRepositoryProvider).createEvent(
             host: user,
             title: _titleCtrl.text.trim(),
             vibe: _vibe,
             code: _code,
+            endsAt: endsAt,
           );
       if (mounted) context.pop();
     } catch (_) {
@@ -371,6 +377,13 @@ class _StepDetails extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          endDate == null
+              ? 'No end date — photos show right away (open album).'
+              : 'Photos stay locked until ${DateFormat('MMM d').format(endDate!)}, then the roll develops all at once.',
+          style: AppText.label(fontSize: 10.5, color: AppTheme.muted),
         ),
         const SizedBox(height: 28),
         Text('VIBE', style: AppText.label()),

@@ -7,6 +7,8 @@
 // collection, otherwise a moment code) + the photo to open first, and resolves
 // the live Firestore list itself so favorites/deletes reflect instantly.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +24,7 @@ import '../../moments/data/mock_photos.dart';
 import '../../moments/data/repositories/photos_repository.dart';
 import '../../moments/domain/photo.dart';
 import '../../moments/presentation/widgets/photo_thumb.dart';
+import '../../quick_shoot/data/repositories/upload_repository.dart';
 
 const Color _charcoal = Color(0xFF1C1A17);
 
@@ -159,6 +162,11 @@ class _PhotoViewerScreenState extends ConsumerState<PhotoViewerScreen> {
             eventId: p.eventId!,
             photoId: p.id,
           );
+      // Best-effort R2 cleanup — orphan-safe if it fails, never blocks the UI.
+      unawaited(ref.read(photoUploaderProvider).deleteMedia(
+            eventId: p.eventId!,
+            keys: [p.storageKey, p.thumbStorageKey],
+          ));
       _toast('Photo deleted.');
     } catch (_) {
       _toast('Couldn’t delete the photo.');

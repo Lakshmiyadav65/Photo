@@ -65,6 +65,14 @@ class R2PhotoUploader implements PhotoUploader {
     if (bytes == null) {
       throw StateError('Could not process the image.');
     }
+    // A small, separate grid thumbnail so the gallery never pulls full-res bytes.
+    // Best-effort: a thumbnail failure must not sink the upload.
+    final thumbBytes = await FlutterImageCompress.compressWithFile(
+      photo.localPath,
+      minWidth: AppConstants.thumbnailDimensionPx,
+      minHeight: AppConstants.thumbnailDimensionPx,
+      quality: AppConstants.thumbnailJpegQuality,
+    );
     onProgress?.call(0.3);
 
     final client = HttpClient();
@@ -86,22 +94,28 @@ class R2PhotoUploader implements PhotoUploader {
       final data = jsonDecode(body) as Map<String, dynamic>;
       onProgress?.call(0.5);
 
-      // 3. PUT the bytes straight to R2 via the presigned URL.
-      // R2/S3 require Content-Length (they reject chunked PUTs with 411), so set
-      // it explicitly — otherwise dart:io streams the body chunked.
-      final put = await client.putUrl(Uri.parse(data['uploadUrl'] as String));
-      put.headers.contentType = ContentType('image', 'jpeg');
-      put.contentLength = bytes.length;
-      put.add(bytes);
-      final putResp = await put.close();
-      await putResp.drain<void>();
-      if (putResp.statusCode < 200 || putResp.statusCode >= 300) {
-        throw HttpException('Storage upload failed (${putResp.statusCode}).');
+      // 3. PUT the full-size bytes straight to R2 via the presigned URL.
+      await _putToR2(client, data['uploadUrl'] as String, bytes);
+      onProgress?.call(0.8);
+
+      // 3b. PUT the thumbnail to its own presigned URL. If anything goes wrong we
+      //     fall back to serving the full image in grids (thumbUrl = publicUrl).
+      final publicUrl = data['publicUrl'] as String;
+      final thumbUploadUrl = data['thumbUploadUrl'] as String?;
+      var thumbUrl = publicUrl;
+      String? thumbStorageKey;
+      if (thumbBytes != null && thumbUploadUrl != null) {
+        try {
+          await _putToR2(client, thumbUploadUrl, thumbBytes);
+          thumbUrl = (data['thumbUrl'] as String?) ?? publicUrl;
+          thumbStorageKey = data['thumbKey'] as String?;
+        } catch (_) {
+          // Keep the full-image fallback; the photo still works.
+        }
       }
       onProgress?.call(0.9);
 
       // 4. Record metadata + bump the roll's photo count in Firestore.
-      final publicUrl = data['publicUrl'] as String;
       await photos.addPhoto(
         eventId: eventId,
         photo: PhotoData(
@@ -109,13 +123,62 @@ class R2PhotoUploader implements PhotoUploader {
           uploaderId: user.uid,
           uploaderName: _displayName(user),
           url: publicUrl,
-          thumbUrl: publicUrl,
+          thumbUrl: thumbUrl,
           storageKey: data['key'] as String?,
+          thumbStorageKey: thumbStorageKey,
           uploadedAt: DateTime.now(),
         ),
       );
       onProgress?.call(1);
       return publicUrl;
+    } finally {
+      client.close();
+    }
+  }
+
+  /// PUT [bytes] to a presigned R2 URL. R2/S3 require Content-Length (they reject
+  /// chunked PUTs with 411), so set it explicitly — otherwise dart:io streams the
+  /// body chunked. Throws on a non-2xx response.
+  Future<void> _putToR2(HttpClient client, String url, List<int> bytes) async {
+    final put = await client.putUrl(Uri.parse(url));
+    put.headers.contentType = ContentType('image', 'jpeg');
+    put.contentLength = bytes.length;
+    put.add(bytes);
+    final putResp = await put.close();
+    await putResp.drain<void>();
+    if (putResp.statusCode < 200 || putResp.statusCode >= 300) {
+      throw HttpException('Storage upload failed (${putResp.statusCode}).');
+    }
+  }
+
+  @override
+  Future<void> deleteMedia({
+    required String eventId,
+    required List<String?> keys,
+  }) async {
+    final user = auth.currentUser;
+    final objectKeys = [
+      for (final k in keys)
+        if (k != null && k.isNotEmpty) k,
+    ];
+    if (user == null || objectKeys.isEmpty) return;
+
+    final client = HttpClient();
+    try {
+      final idToken = await user.getIdToken();
+      final req = await client.openUrl(
+        'DELETE',
+        Uri.parse('$workerBaseUrl/uploads'),
+      );
+      req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $idToken');
+      req.headers.contentType = ContentType.json;
+      req.add(utf8.encode(jsonEncode({
+        'eventId': eventId,
+        'keys': objectKeys,
+      })));
+      final resp = await req.close();
+      await resp.drain<void>();
+      // Best-effort: a non-2xx just means the object lingers; never rethrow.
     } finally {
       client.close();
     }

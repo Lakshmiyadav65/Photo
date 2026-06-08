@@ -1,0 +1,5 @@
+# Cloudflare Worker (Node) — keep deps and local secrets out of git.
+node_modules/
+.wrangler/
+.dev.vars
+*.log

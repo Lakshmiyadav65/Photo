@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme.dart';
+import '../../data/mock_moments.dart';
 import '../../data/mock_photos.dart';
 import '../../domain/moment.dart';
 import 'photo_thumb.dart';
@@ -34,6 +35,10 @@ class MomentCover extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final fallback = _NameCover(moment: moment);
+
+    // Develop-locked rolls show NO real image — not the auto cover and not a
+    // host-set cover (which would otherwise leak a photo). Just the gradient.
+    if (!ref.watch(rollDevelopedProvider(moment.code))) return fallback;
 
     // 1. host override, else 2. first uploaded photo.
     final override = moment.coverUrlOverride;

@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../domain/activity.dart';
 import '../../domain/photo.dart';
+import '../models/activity_data.dart';
 import '../models/photo_data.dart';
 import 'photos_repository.dart';
 
@@ -18,6 +20,9 @@ class FirebasePhotosRepository implements PhotosRepository {
 
   CollectionReference<Map<String, dynamic>> _photos(String eventId) =>
       _event(eventId).collection('photos');
+
+  CollectionReference<Map<String, dynamic>> _activity(String eventId) =>
+      _event(eventId).collection('activity');
 
   @override
   Stream<List<Photo>> watchPhotos(String eventId) {
@@ -54,6 +59,23 @@ class FirebasePhotosRepository implements PhotosRepository {
       'lastActiveAt': Timestamp.now(),
     });
     await batch.commit();
+
+    // Log the upload to the activity feed — best-effort, AFTER the core write
+    // (NOT in the batch). The feed is a nicety; a hiccup here (or rules not yet
+    // deployed) must never sink the upload. actorId == uploaderId == the signed-
+    // in uid, which the activity create rule requires.
+    try {
+      await _activity(eventId).add(
+        ActivityData(
+          type: ActivityType.uploaded,
+          actorId: photo.uploaderId,
+          actorName: photo.uploaderName,
+          at: photo.uploadedAt ?? DateTime.now(),
+        ).toMap(),
+      );
+    } catch (_) {
+      // Activity is non-critical — swallow.
+    }
   }
 
   @override

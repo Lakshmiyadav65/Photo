@@ -17,7 +17,9 @@ import 'features/auth/data/firebase_user_profile_repository.dart';
 import 'features/auth/data/user_profile_repository.dart';
 import 'features/gangs/data/repositories/firebase_gangs_repository.dart';
 import 'features/gangs/data/repositories/gangs_repository.dart';
+import 'features/moments/data/repositories/activity_repository.dart';
 import 'features/moments/data/repositories/events_repository.dart';
+import 'features/moments/data/repositories/firebase_activity_repository.dart';
 import 'features/moments/data/repositories/firebase_events_repository.dart';
 import 'features/moments/data/repositories/firebase_photos_repository.dart';
 import 'features/moments/data/repositories/photos_repository.dart';
@@ -54,6 +56,10 @@ Future<void> main() async {
         if (firebaseStatus == FirebaseStatus.ready)
           photosRepositoryProvider.overrideWithValue(
             FirebasePhotosRepository(FirebaseFirestore.instance),
+          ),
+        if (firebaseStatus == FirebaseStatus.ready)
+          activityRepositoryProvider.overrideWithValue(
+            FirebaseActivityRepository(FirebaseFirestore.instance),
           ),
         if (firebaseStatus == FirebaseStatus.ready)
           userProfileRepositoryProvider.overrideWithValue(

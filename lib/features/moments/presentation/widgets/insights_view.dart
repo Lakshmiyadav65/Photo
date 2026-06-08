@@ -74,7 +74,9 @@ class InsightsView extends StatelessWidget {
           children: [
             Expanded(child: _StatCard(label: 'TOTAL SHOTS', value: '${moment.photoCount}')),
             const SizedBox(width: 12),
-            Expanded(child: _StatCard(label: 'PHOTOGRAPHERS', value: '${counts.length}')),
+            // Real view count (members opening the gallery). The contributor
+            // count still reads off the "most prolific" ranking below.
+            Expanded(child: _StatCard(label: 'VIEWS', value: '${moment.viewCount}')),
           ],
         ),
         const SizedBox(height: 12),

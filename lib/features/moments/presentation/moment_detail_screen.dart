@@ -3,6 +3,8 @@
 // coral upload FAB. Insights & members open as bottom sheets; settings pushes a
 // screen. Mock photos for now (Phase 5 streams events/<code>/photos).
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,17 +13,23 @@ import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import '../../../app/theme.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../quick_shoot/data/models/pending_photo.dart';
+import '../../quick_shoot/data/repositories/upload_repository.dart';
 import '../../quick_shoot/data/providers/photo_queue_provider.dart';
 import '../../quick_shoot/presentation/widgets/pending_photo_tile.dart';
 import '../../quick_shoot/presentation/widgets/upload_progress_banner.dart';
 import '../../upload/presentation/upload_actions.dart';
+import '../data/activity_providers.dart';
+import '../data/activity_seen_store.dart';
 import '../data/mock_moments.dart';
 import '../data/mock_photos.dart';
+import '../data/repositories/events_repository.dart';
 import '../data/repositories/photos_repository.dart';
 import '../domain/moment.dart';
 import '../domain/photo.dart';
+import 'widgets/activity_view.dart';
 import 'widgets/avatar_stack.dart';
 import 'widgets/insights_view.dart';
+import 'widgets/locked_roll_view.dart';
 import 'widgets/members_view.dart';
 import 'widgets/photo_thumb.dart';
 
@@ -154,14 +162,23 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
     if (confirmed != true) return;
     setState(() => _bulkBusy = true);
     final repo = ref.read(photosRepositoryProvider);
+    final cleanupKeys = <String?>[];
     var ok = 0;
     for (final p in mine) {
       try {
         await repo.deletePhoto(eventId: p.eventId!, photoId: p.id);
+        cleanupKeys.addAll([p.storageKey, p.thumbStorageKey]);
         ok++;
       } catch (_) {
         // Continue with the rest.
       }
+    }
+    // Best-effort R2 cleanup for the photos that did delete (all one roll here).
+    if (cleanupKeys.isNotEmpty) {
+      unawaited(ref.read(photoUploaderProvider).deleteMedia(
+            eventId: mine.first.eventId!,
+            keys: cleanupKeys,
+          ));
     }
     if (!mounted) return;
     setState(() {
@@ -171,6 +188,56 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
     _snack(skipped > 0
         ? 'Deleted $ok · skipped $skipped not yours'
         : 'Deleted $ok photo${ok == 1 ? '' : 's'}');
+  }
+
+  /// Host-only: pull the develop deadline to now so the roll reveals at once.
+  Future<void> _developNow(Moment moment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cream,
+        title: const Text('Develop now?'),
+        content: const Text(
+            'This reveals every shot to the whole gang right away. You can’t lock it back up.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Develop',
+                style: TextStyle(color: AppTheme.coral)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(eventsRepositoryProvider).developNow(moment.id);
+      _snack('Developing — your photos are revealing.');
+    } catch (_) {
+      _snack('Couldn’t develop the roll.');
+    }
+  }
+
+  /// Open the activity feed and mark it seen (clears the bell's unread dot).
+  void _openActivity(Moment moment) {
+    ref.read(activitySeenProvider.notifier).markSeen(moment.id);
+    showActivitySheet(context, moment.code);
+  }
+
+  /// Count one gallery view per roll per app session. Guarded by a session-wide
+  /// set so rebuilds / reopens don't inflate the count; failures are silent (a
+  /// missed view is harmless, and the repo isn't wired in the pre-Firebase flow).
+  void _maybeCountView(Moment moment) {
+    if (!ref.read(countedViewRollsProvider).add(moment.id)) return;
+    try {
+      unawaited(
+          ref.read(eventsRepositoryProvider).incrementViewCount(moment.id));
+    } catch (_) {
+      // Repository not wired (pre-Firebase) — skip silently.
+    }
   }
 
   void _snack(String message) {
@@ -193,6 +260,16 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
         ),
       );
     }
+
+    _maybeCountView(moment);
+
+    final myUid = ref.read(authStateProvider).value?.uid;
+    // Develop-lock: a roll with a future end time is Live (photos hidden).
+    final locked =
+        moment.endsAt != null && DateTime.now().isBefore(moment.endsAt!);
+    // Tick only while locked, so the countdown updates and the screen flips to
+    // the revealed grid the instant it develops. Developed rolls never tick.
+    if (locked) ref.watch(tickerProvider);
 
     final photos = ref.watch(momentPhotosProvider(widget.code));
     final filtered = _applyFilter(photos);
@@ -234,14 +311,17 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
             else
               _GalleryHeader(
                 moment: moment,
+                unread: ref.watch(unreadActivityProvider(moment.code)),
                 onBack: () => context.pop(),
+                onActivity: () => _openActivity(moment),
                 onInsights: () => showInsightsSheet(context, moment, photos),
                 onShare: () => context.push('/moment/${moment.code}/share'),
                 // The moment ⋮ opens THIS moment's settings only — gang-level
                 // leave/delete live on the gang screen, never here.
                 onMore: () => context.push('/moment/${moment.code}/settings'),
               ),
-            if (!selecting) ...[
+            // The member row stays visible in both locked and revealed states.
+            if (!selecting)
               _MemberRow(
                 moment: moment,
                 onTap: () => showMembersSheet(
@@ -251,29 +331,42 @@ class _MomentDetailScreenState extends ConsumerState<MomentDetailScreen> {
                   onInvite: () => context.push('/moment/${moment.code}/share'),
                 ),
               ),
-              _FilterTabs(
-                value: _filter,
-                onChanged: (f) => setState(() => _filter = f),
-              ),
-              // Quick Shoot photos waiting to upload to this moment. Renders
-              // nothing when the queue is empty. Tapping through opens the
-              // dedicated pending view with the grey-overlay grid.
-              GestureDetector(
-                onTap: () => context.push('/pending/${moment.code}'),
-                child: UploadProgressBanner(momentId: moment.code),
+            if (locked)
+              // Develop-locked: no photos shown — a live countdown instead. The
+              // host gets a "Develop now" button (non-hosts don't).
+              Expanded(
+                child: LockedRollView(
+                  moment: moment,
+                  onDevelopNow:
+                      moment.hostId == myUid ? () => _developNow(moment) : null,
+                ),
+              )
+            else ...[
+              if (!selecting) ...[
+                _FilterTabs(
+                  value: _filter,
+                  onChanged: (f) => setState(() => _filter = f),
+                ),
+                // Quick Shoot photos waiting to upload to this moment. Renders
+                // nothing when the queue is empty. Tapping through opens the
+                // dedicated pending view with the grey-overlay grid.
+                GestureDetector(
+                  onTap: () => context.push('/pending/${moment.code}'),
+                  child: UploadProgressBanner(momentId: moment.code),
+                ),
+              ],
+              Expanded(
+                child: (filtered.isEmpty && localPhotos.isEmpty)
+                    ? _EmptyFilter(filter: _filter)
+                    : _PhotoGrid(
+                        localPhotos: localPhotos,
+                        photos: filtered,
+                        selectedIds: _selected,
+                        onTap: _onPhotoTap,
+                        onLongPress: (p) => _toggleSelected(p.id),
+                      ),
               ),
             ],
-            Expanded(
-              child: (filtered.isEmpty && localPhotos.isEmpty)
-                  ? _EmptyFilter(filter: _filter)
-                  : _PhotoGrid(
-                      localPhotos: localPhotos,
-                      photos: filtered,
-                      selectedIds: _selected,
-                      onTap: _onPhotoTap,
-                      onLongPress: (p) => _toggleSelected(p.id),
-                    ),
-            ),
           ],
         ),
       ),
@@ -338,14 +431,20 @@ class _SelectionBar extends StatelessWidget {
 class _GalleryHeader extends StatelessWidget {
   const _GalleryHeader({
     required this.moment,
+    required this.unread,
     required this.onBack,
+    required this.onActivity,
     required this.onInsights,
     required this.onShare,
     required this.onMore,
   });
 
   final Moment moment;
+
+  /// Unseen activity entries — drives the bell's unread dot.
+  final int unread;
   final VoidCallback onBack;
+  final VoidCallback onActivity;
   final VoidCallback onInsights;
   final VoidCallback onShare;
   final VoidCallback onMore;
@@ -380,9 +479,47 @@ class _GalleryHeader extends StatelessWidget {
               ],
             ),
           ),
+          _BellIcon(unread: unread, onTap: onActivity),
           _HeaderIcon(icon: Icons.bar_chart_rounded, onTap: onInsights),
           _HeaderIcon(icon: Icons.ios_share_rounded, onTap: onShare),
           _HeaderIcon(icon: Icons.more_horiz_rounded, onTap: onMore),
+        ],
+      ),
+    );
+  }
+}
+
+/// Activity-feed bell with a coral unread dot when there's something new.
+class _BellIcon extends StatelessWidget {
+  const _BellIcon({required this.unread, required this.onTap});
+
+  final int unread;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      color: AppTheme.ink,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.notifications_none_rounded, size: 22),
+          if (unread > 0)
+            Positioned(
+              top: -1,
+              right: -1,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: AppTheme.coral,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppTheme.cream, width: 1.5),
+                ),
+              ),
+            ),
         ],
       ),
     );

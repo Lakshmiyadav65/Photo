@@ -21,6 +21,15 @@ service cloud.firestore {
       return signedIn() && uid() in eventMembers(eventId);
     }
 
+    // The film "develop-lock": a roll's photos are readable only once it has
+    // developed — i.e. it has no end time (open album) OR the develop time has
+    // passed. MUST short-circuit absent/null `endsAt` BEFORE the time compare,
+    // or the comparison throws and denies even a developed roll's reads.
+    function rollDeveloped(eventId) {
+      let e = get(/databases/$(database)/documents/events/$(eventId)).data;
+      return !('endsAt' in e) || e.endsAt == null || request.time >= e.endsAt;
+    }
+
     // ---- users -------------------------------------------------------------
     // Profiles are readable by any signed-in user (names/avatars show up in
     // rolls); writable only by their owner.
@@ -113,9 +122,12 @@ service cloud.firestore {
         allow create, update, delete: if signedIn() && memberId == uid();
       }
 
-      // photos subcollection — metadata only; bytes live in Cloudflare R2
+      // photos subcollection — metadata only; bytes live in Cloudflare R2.
+      // Reads are develop-locked: hidden while the roll is Live, revealed once
+      // it develops. Uploads (create) stay allowed while Live so members can
+      // still shoot — they just can't view until reveal.
       match /photos/{photoId} {
-        allow read:   if isEventMember(eventId);
+        allow read:   if isEventMember(eventId) && rollDeveloped(eventId);
         allow create: if isEventMember(eventId)
                       && request.resource.data.uploaderId == uid();
         // Only the favorite flag may flip; uploaderId/url/storageKey are frozen.
@@ -124,6 +136,16 @@ service cloud.firestore {
                       && request.resource.data.diff(resource.data)
                            .affectedKeys().hasOnly(['favorite']);
         allow delete: if signedIn() && resource.data.uploaderId == uid();
+      }
+
+      // activity subcollection — the in-app feed (stands in for push). Any member
+      // reads it; a member may append ONLY their own action (actorId == self).
+      // Append-only: entries are never edited or removed.
+      match /activity/{activityId} {
+        allow read:   if isEventMember(eventId);
+        allow create: if isEventMember(eventId)
+                      && request.resource.data.actorId == uid();
+        allow update, delete: if false;
       }
     }
 

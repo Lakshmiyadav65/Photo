@@ -3,11 +3,13 @@
 // Photos aren't wired yet (Phase 4/5), so the image is a per-roll gradient.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../shared/widgets/gang_avatar.dart';
+import '../../data/mock_moments.dart';
 import '../../domain/moment.dart';
 import 'moment_cover.dart';
 
@@ -26,11 +28,6 @@ class MomentCard extends StatelessWidget {
   /// Long-press surfaces the leave/delete action sheet.
   final VoidCallback? onLongPress;
   final VoidCallback? onInsights;
-
-  String get _dateLabel {
-    final d = moment.developedAt ?? moment.endsAt ?? DateTime.now();
-    return DateFormat('MMM d').format(d).toUpperCase();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,17 +56,7 @@ class MomentCard extends StatelessWidget {
               Positioned(
                 top: 14,
                 left: 14,
-                child: _GlassPill(
-                  child: Text(
-                    _dateLabel,
-                    style: AppText.mono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+                child: _StatusPill(moment: moment),
               ),
 
               Positioned(
@@ -178,6 +165,67 @@ class _AvatarStrip extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Top-left card pill: a date once developed, or an amber **LIVE + countdown**
+/// while the roll is still develop-locked. Watches [tickerProvider] only while
+/// locked, so it ticks down and clears itself the instant the roll develops.
+class _StatusPill extends ConsumerWidget {
+  const _StatusPill({required this.moment});
+
+  final Moment moment;
+
+  static String _short(Duration d) {
+    if (d.inDays >= 1) return '${d.inDays}d ${d.inHours % 24}h';
+    if (d.inHours >= 1) return '${d.inHours}h ${d.inMinutes % 60}m';
+    if (d.inMinutes >= 1) return '${d.inMinutes}m';
+    return '${d.inSeconds}s';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final locked =
+        moment.endsAt != null && DateTime.now().isBefore(moment.endsAt!);
+    if (!locked) {
+      final d = moment.developedAt ?? moment.endsAt ?? DateTime.now();
+      return _GlassPill(
+        child: Text(
+          DateFormat('MMM d').format(d).toUpperCase(),
+          style: AppText.mono(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+            color: Colors.white,
+          ),
+        ),
+      );
+    }
+    ref.watch(tickerProvider); // live countdown while locked
+    final left = moment.timeLeft ?? Duration.zero;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.amber,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.lock_clock_rounded, size: 12, color: Colors.white),
+          const SizedBox(width: 5),
+          Text(
+            'LIVE · ${_short(left)}',
+            style: AppText.mono(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.white,
+            ),
+          ),
         ],
       ),
     );

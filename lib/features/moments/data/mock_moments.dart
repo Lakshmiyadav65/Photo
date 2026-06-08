@@ -4,6 +4,8 @@
 // Mutations (create / join / leave) go through [eventsRepositoryProvider] at the
 // call sites. (Filename kept so existing imports stay valid.)
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/data/auth_repository.dart';
@@ -31,6 +33,35 @@ final visibleMomentsProvider = Provider<List<Moment>>((ref) {
   ];
   visible.sort((a, b) => b.sortTime.compareTo(a.sortTime));
   return visible;
+});
+
+/// Roll ids whose gallery view has already been counted this app session, so
+/// reopening the same roll doesn't inflate `viewCount`. Mutable set that lives
+/// for the ProviderContainer's lifetime (i.e. the whole session).
+final countedViewRollsProvider = Provider<Set<String>>((_) => <String>{});
+
+/// A 1-second wall-clock tick. Drives live develop-lock countdowns and the
+/// reveal. Only LIVE rolls subscribe (via [rollDevelopedProvider] and the
+/// countdown widgets), so developed/open rolls never trigger per-second
+/// rebuilds.
+final tickerProvider = StreamProvider<DateTime>((ref) {
+  return Stream<DateTime>.periodic(
+    const Duration(seconds: 1),
+    (_) => DateTime.now(),
+  );
+});
+
+/// Whether a roll has developed — i.e. its photos are visible. True for open
+/// albums (no `endsAt`) and for rolls past their `endsAt`. While a roll is still
+/// Live it watches [tickerProvider], so this flips false→true exactly once at
+/// the develop time; that rebuild auto-re-subscribes the photo/cover streams
+/// (no manual invalidate). After it develops it stops watching the tick.
+final rollDevelopedProvider = Provider.family<bool, String>((ref, code) {
+  final m = ref.watch(momentByCodeProvider(code));
+  if (m == null || m.endsAt == null) return true;
+  if (!DateTime.now().isBefore(m.endsAt!)) return true; // already developed
+  ref.watch(tickerProvider); // LIVE only → re-evaluate on each tick
+  return !DateTime.now().isBefore(m.endsAt!);
 });
 
 /// Reactive lookup by code (or id) from the live store.

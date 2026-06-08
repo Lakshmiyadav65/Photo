@@ -53,7 +53,7 @@ async function verifyFirebaseToken(token, projectId) {
 function cors(env) {
   return {
     'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'authorization, content-type',
   };
 }
@@ -74,6 +74,115 @@ function extFor(contentType, fallback) {
   return map[contentType] || fallback;
 }
 
+// Signed-S3 client + bucket origin for direct R2 object operations.
+function r2For(env) {
+  const r2 = new AwsClient({
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_SECRET_ACCESS_KEY,
+    service: 's3',
+    region: 'auto',
+  });
+  const origin = `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET}`;
+  return { r2, origin };
+}
+
+// POST /uploads — mint presigned PUT URLs for a full object + its thumbnail.
+async function handleUpload(request, env, claims) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ error: 'bad json' }, 400, env);
+  }
+  const { eventId, contentType } = payload;
+  if (!eventId || !/^[A-Za-z0-9_-]{1,64}$/.test(eventId)) {
+    return json({ error: 'bad eventId' }, 400, env);
+  }
+  const ext = extFor(contentType, '');
+  if (!ALLOWED_IMAGE.includes(ext) && !ALLOWED_VIDEO.includes(ext)) {
+    return json({ error: 'unsupported contentType' }, 415, env);
+  }
+  const isVideo = ALLOWED_VIDEO.includes(ext);
+
+  // Build object keys (unguessable id; uploader recorded for audit).
+  const photoId = crypto.randomUUID();
+  const base = `events/${eventId}/${photoId}`;
+  const key = `${base}.${ext}`;
+  const thumbKey = `${base}_thumb.jpg`; // thumbs are always jpeg
+
+  // Presign PUT URLs (bytes go straight to R2, not through this Worker).
+  const { r2, origin } = r2For(env);
+  async function presign(objectKey) {
+    const signed = await r2.sign(
+      new Request(`${origin}/${objectKey}?X-Amz-Expires=${PRESIGN_TTL}`, {
+        method: 'PUT',
+      }),
+      { aws: { signQuery: true } },
+    );
+    return signed.url;
+  }
+
+  const uploadUrl = await presign(key);
+  const thumbUploadUrl = isVideo ? null : await presign(thumbKey);
+
+  return json(
+    {
+      photoId,
+      uploaderId: claims.sub,
+      key,
+      thumbKey: isVideo ? null : thumbKey,
+      uploadUrl,
+      thumbUploadUrl,
+      publicUrl: `${env.MEDIA_BASE_URL}/${key}`,
+      thumbUrl: isVideo ? null : `${env.MEDIA_BASE_URL}/${thumbKey}`,
+      expiresIn: PRESIGN_TTL,
+    },
+    200,
+    env,
+  );
+}
+
+// DELETE /uploads — remove an event's R2 objects (full image + thumbnail) when a
+// photo is deleted, so storage doesn't grow forever. Trust model: any signed-in
+// caller may delete, but every key MUST live under `events/{eventId}/` — and the
+// random photoId in the key is only discoverable by members (it lives in the
+// member-gated Firestore photo doc). Tightening to per-uploader ownership would
+// need the Admin SDK / a signed delete grant; that's deferred (v1 members trust
+// each other; the Firestore doc delete itself stays uploader-gated by the rules).
+async function handleDelete(request, env, _claims) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ error: 'bad json' }, 400, env);
+  }
+  const { eventId, keys } = payload;
+  if (!eventId || !/^[A-Za-z0-9_-]{1,64}$/.test(eventId)) {
+    return json({ error: 'bad eventId' }, 400, env);
+  }
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return json({ error: 'no keys' }, 400, env);
+  }
+  const prefix = `events/${eventId}/`;
+  const scoped = keys.filter((k) => typeof k === 'string' && k.startsWith(prefix));
+  if (scoped.length === 0) {
+    return json({ error: 'keys out of event scope' }, 400, env);
+  }
+
+  const { r2, origin } = r2For(env);
+  let deleted = 0;
+  for (const objectKey of scoped) {
+    try {
+      const res = await r2.fetch(`${origin}/${objectKey}`, { method: 'DELETE' });
+      // R2 returns 204 on delete; 404 (already gone) is also fine.
+      if (res.ok || res.status === 404) deleted++;
+    } catch {
+      // Best-effort: skip this object, keep deleting the rest.
+    }
+  }
+  return json({ deleted }, 200, env);
+}
+
 // --- Worker -----------------------------------------------------------------
 export default {
   async fetch(request, env) {
@@ -81,11 +190,11 @@ export default {
       return new Response(null, { headers: cors(env) });
     }
     const url = new URL(request.url);
-    if (request.method !== 'POST' || url.pathname !== '/uploads') {
+    if (url.pathname !== '/uploads') {
       return json({ error: 'not found' }, 404, env);
     }
 
-    // 1. Authenticate.
+    // Authenticate (shared by upload + delete).
     const auth = request.headers.get('authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
     if (!token) return json({ error: 'missing bearer token' }, 401, env);
@@ -97,65 +206,8 @@ export default {
       return json({ error: 'invalid token', detail: String(e) }, 401, env);
     }
 
-    // 2. Validate request.
-    let payload;
-    try {
-      payload = await request.json();
-    } catch {
-      return json({ error: 'bad json' }, 400, env);
-    }
-    const { eventId, contentType } = payload;
-    if (!eventId || !/^[A-Za-z0-9_-]{1,64}$/.test(eventId)) {
-      return json({ error: 'bad eventId' }, 400, env);
-    }
-    const ext = extFor(contentType, '');
-    if (!ALLOWED_IMAGE.includes(ext) && !ALLOWED_VIDEO.includes(ext)) {
-      return json({ error: 'unsupported contentType' }, 415, env);
-    }
-    const isVideo = ALLOWED_VIDEO.includes(ext);
-
-    // 3. Build object keys (unguessable id; uploader recorded for audit).
-    const photoId = crypto.randomUUID();
-    const base = `events/${eventId}/${photoId}`;
-    const key = `${base}.${ext}`;
-    const thumbKey = `${base}_thumb.jpg`; // thumbs are always jpeg
-
-    // 4. Presign PUT URLs (bytes go straight to R2, not through this Worker).
-    const r2 = new AwsClient({
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-      service: 's3',
-      region: 'auto',
-    });
-    const origin = `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET}`;
-
-    async function presign(objectKey) {
-      const signed = await r2.sign(
-        new Request(`${origin}/${objectKey}?X-Amz-Expires=${PRESIGN_TTL}`, {
-          method: 'PUT',
-        }),
-        { aws: { signQuery: true } },
-      );
-      return signed.url;
-    }
-
-    const uploadUrl = await presign(key);
-    const thumbUploadUrl = isVideo ? null : await presign(thumbKey);
-
-    return json(
-      {
-        photoId,
-        uploaderId: claims.sub,
-        key,
-        thumbKey: isVideo ? null : thumbKey,
-        uploadUrl,
-        thumbUploadUrl,
-        publicUrl: `${env.MEDIA_BASE_URL}/${key}`,
-        thumbUrl: isVideo ? null : `${env.MEDIA_BASE_URL}/${thumbKey}`,
-        expiresIn: PRESIGN_TTL,
-      },
-      200,
-      env,
-    );
+    if (request.method === 'POST') return handleUpload(request, env, claims);
+    if (request.method === 'DELETE') return handleDelete(request, env, claims);
+    return json({ error: 'not found' }, 404, env);
   },
 };

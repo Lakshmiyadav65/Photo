@@ -17,6 +17,7 @@ class Moment {
     required this.photoCount,
     required this.memberCount,
     required this.members,
+    this.hostId = '',
     this.vibe,
     this.shotsLeft,
     this.endsAt,
@@ -30,6 +31,11 @@ class Moment {
   final String id;
   final String title;
   final String code; // 6-char join code, uppercase
+
+  /// Uid of the host — lets the UI gate host-only actions (e.g. "Develop now").
+  /// Empty for lightweight previews that don't carry it.
+  final String hostId;
+
   final RollState state;
   final int photoCount;
   final int memberCount;
@@ -98,6 +104,7 @@ class Moment {
         id: id,
         title: title,
         code: code,
+        hostId: hostId,
         state: state,
         photoCount: photoCount ?? this.photoCount,
         memberCount: memberCount ?? this.memberCount,
