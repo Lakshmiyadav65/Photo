@@ -12,7 +12,28 @@
           "package_name": "com.gangroll.gang_roll"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "975719145676-a8237h91d5m6sg0glaiuhgoqosdcgvvo.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gangroll.gang_roll",
+            "certificate_hash": "5ffcc3ff05459c7f931e8b8c6f2987cce7669319"
+          }
+        },
+        {
+          "client_id": "975719145676-me6ddbjekopcjm31q6ekbe0d5lk7j4li.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.gangroll.gang_roll",
+            "certificate_hash": "27f12b2ef2f56c0771df47ccfd817b5182174604"
+          }
+        },
+        {
+          "client_id": "975719145676-j6p11g14pm8lcid870m4b4fdpdg2pk0p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCHWm1q0XncOjtKUfib40HZK7n0Opr4OIc"
@@ -20,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "975719145676-j6p11g14pm8lcid870m4b4fdpdg2pk0p.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
