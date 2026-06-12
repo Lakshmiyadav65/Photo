@@ -15,6 +15,7 @@ class LabeledField extends StatelessWidget {
     this.keyboardType,
     this.textCapitalization = TextCapitalization.none,
     this.onSubmitted,
+    this.readOnly = false,
   });
 
   final String label;
@@ -24,6 +25,10 @@ class LabeledField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
   final ValueChanged<String>? onSubmitted;
+
+  /// Display-only field — value is shown but can't be edited (e.g. the account
+  /// email, which changes through a separate verified flow).
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -38,8 +43,12 @@ class LabeledField extends StatelessWidget {
           keyboardType: keyboardType,
           textCapitalization: textCapitalization,
           onSubmitted: onSubmitted,
+          readOnly: readOnly,
           cursorColor: AppTheme.coral,
-          style: AppText.display(fontSize: 17),
+          style: AppText.display(
+            fontSize: 17,
+            color: readOnly ? AppTheme.muted : null,
+          ),
           decoration: InputDecoration(hintText: hint),
         ),
       ],

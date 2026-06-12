@@ -79,6 +79,9 @@ class MainActivity : FlutterActivity() {
                     result.success(pendingMomentId)
                     pendingMomentId = null
                 }
+                // Android API level — lets Dart pick the right gallery permission
+                // (photos on 13+/READ_MEDIA_IMAGES, storage on older devices).
+                "getSdkInt" -> result.success(Build.VERSION.SDK_INT)
                 else -> result.notImplemented()
             }
         }

@@ -13,7 +13,6 @@ import '../../../app/theme.dart';
 import '../../../shared/widgets/app_toggle.dart';
 import '../../../shared/widgets/brand.dart';
 import '../../active_moment/data/camera_shortcut_store.dart';
-import '../../quick_shoot/presentation/shortcut_toggle_actions.dart';
 import '../data/permissions_store.dart';
 
 class PermissionsScreen extends ConsumerWidget {
@@ -74,7 +73,12 @@ class PermissionsScreen extends ConsumerWidget {
                   const SizedBox(height: 14),
                   _ShortcutCard(
                     value: shortcutOn,
-                    onChanged: (v) => handleShortcutToggle(context, ref, v),
+                    // During onboarding there's no moment yet, so just record
+                    // the user's intent. The real home-screen icon is pinned
+                    // later (from Profile / Quick Shoot settings) once a moment
+                    // exists — enabling here must NOT force "create a moment".
+                    onChanged: (v) =>
+                        ref.read(cameraShortcutProvider.notifier).set(v),
                   ),
                 ],
               ),

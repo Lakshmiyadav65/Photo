@@ -15,6 +15,7 @@ import '../../auth/data/user_profile_repository.dart';
 import '../../gangs/data/mock_gangs.dart';
 import '../../moments/data/mock_moments.dart';
 import '../../quick_shoot/presentation/shortcut_toggle_actions.dart';
+import '../data/avatar_store.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -79,6 +80,7 @@ class ProfileScreen extends ConsumerWidget {
     // toggle ON on first render before prefs resolved, which read as "enabled by
     // default" to the user (Bug #1). Mirror the real default instead.
     final shortcutOn = ref.watch(cameraShortcutProvider).value ?? false;
+    final avatarPath = ref.watch(userAvatarProvider).value;
 
     return Scaffold(
       backgroundColor: AppTheme.cream,
@@ -107,7 +109,7 @@ class ProfileScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  GangAvatar(name: name, size: 88),
+                  GangAvatar(name: name, size: 88, imagePath: avatarPath),
                   const SizedBox(height: 14),
                   Text(name, style: AppText.display(fontSize: 24)),
                   const SizedBox(height: 4),

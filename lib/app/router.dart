@@ -189,6 +189,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (_, state) => CameraScreen(
           momentCode: state.uri.queryParameters['moment'],
+          // `shortcut=1` marks a standalone Quick Shoot launch (home-screen
+          // icon) — the camera then exits to the launcher on close instead of
+          // navigating into the app.
+          shortcut: state.uri.queryParameters['shortcut'] == '1',
         ),
       ),
       GoRoute(

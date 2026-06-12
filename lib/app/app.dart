@@ -39,12 +39,13 @@ class _GangRollAppState extends ConsumerState<GangRollApp> {
     _shortcuts.listen(_warmOpenCamera);
   }
 
-  /// Warm-start tap of the pinned icon: open the camera bound to the moment.
-  /// Closing the camera (X / back) lands on that moment — handled by the camera.
+  /// Warm-start tap of the pinned icon: open the standalone Quick Shoot camera
+  /// bound to the moment. `shortcut=1` keeps it camera-only — closing it (X /
+  /// back) exits to the launcher rather than diving into the app.
   void _warmOpenCamera(String momentId) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(appRouterProvider).push('/camera?moment=$momentId');
+      ref.read(appRouterProvider).push('/camera?moment=$momentId&shortcut=1');
     });
   }
 

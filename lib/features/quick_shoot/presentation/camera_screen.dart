@@ -32,11 +32,18 @@ const _storage = LocalStorageService();
 const _zoomStops = [0.5, 1.0, 2.0, 3.0];
 
 class CameraScreen extends ConsumerStatefulWidget {
-  const CameraScreen({super.key, this.momentCode});
+  const CameraScreen({super.key, this.momentCode, this.shortcut = false});
 
   /// Pre-bound destination from the route. Falls back to the Quick Shoot
   /// binding, then the Active Moment.
   final String? momentCode;
+
+  /// True when this camera was launched from the home-screen Quick Shoot
+  /// shortcut. A shortcut launch is a *standalone* camera — it is NOT part of
+  /// the app's navigation. Closing it (X / system back / thumbnail) exits to the
+  /// launcher instead of diving into the app. Shots still flow to the moment's
+  /// pending queue and surface next time the user opens the app normally.
+  final bool shortcut;
 
   @override
   ConsumerState<CameraScreen> createState() => _CameraScreenState();
@@ -96,9 +103,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     super.dispose();
   }
 
-  /// Close the camera and land on the selected moment (showing the new shots);
-  /// if no moment was ever selected, just pop.
+  /// Close the camera.
+  ///
+  ///   • Shortcut launch → exit the app entirely (back to the launcher). The
+  ///     camera is standalone here; it must never reveal or navigate into the
+  ///     app. Captured shots are already queued and appear when the app is
+  ///     opened normally.
+  ///   • In-app launch → land on the selected moment (showing the new shots);
+  ///     if no moment was ever selected, just pop.
   void _close() {
+    if (widget.shortcut) {
+      SystemNavigator.pop();
+      return;
+    }
     final code = _momentCode;
     if (code != null) {
       context.pushReplacement('/moment/$code');
@@ -323,8 +340,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final controller = _controller;
     final ready = controller != null && controller.value.isInitialized;
 
-    // System back / back-gesture must do exactly what Close (X) does → land on
-    // the relevant moment, never a default pop to the dashboard or app exit.
+    // System back / back-gesture must do exactly what Close (X) does, via
+    // _close(): land on the relevant moment for an in-app launch, or exit to the
+    // launcher for a standalone shortcut launch — never a default pop.
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -392,7 +410,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   shotCount: _shotCount,
                   canFlip: _cameras.length > 1,
                   onShutter: ready ? _capture : null,
-                  onThumbTap: _close, // tap recent shot → open the moment
+                  // In-app: tap recent shot → open the moment. Shortcut launch is
+                  // camera-only, so the thumbnail never navigates into the app.
+                  onThumbTap: widget.shortcut ? null : _close,
                   onFlip: _flipCamera,
                 ),
                 const SizedBox(height: 20),
@@ -603,28 +623,19 @@ class _ModeStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Visual only — PHOTO is the active (and only working) mode.
-    const modes = ['VIDEO', 'PHOTO', 'PORTRAIT'];
-    const active = 'PHOTO';
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        for (final m in modes)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Text(
-              m,
-              style: AppText.mono(
-                fontSize: 12,
-                fontWeight: m == active ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: 1,
-                color: m == active
-                    ? AppTheme.amber
-                    : Colors.white.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-      ],
+    // gang.roll is a photo-roll app — every capture flows into a moment's photo
+    // grid. Video has nowhere to land and true portrait/bokeh needs hardware
+    // depth APIs the camera plugin can't reach, so we ship a single honest mode
+    // (PHOTO) rather than dead VIDEO/PORTRAIT labels. The lone active marker
+    // keeps the stock-camera rhythm without faking modes that don't work.
+    return Text(
+      'PHOTO',
+      style: AppText.mono(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 2,
+        color: AppTheme.amber,
+      ),
     );
   }
 }
@@ -644,8 +655,9 @@ class _BottomBar extends StatelessWidget {
   final bool canFlip;
   final VoidCallback? onShutter;
 
-  /// Tap the recent-shot thumbnail → open the relevant moment.
-  final VoidCallback onThumbTap;
+  /// Tap the recent-shot thumbnail → open the relevant moment. Null in a
+  /// shortcut launch, where the thumbnail must not navigate into the app.
+  final VoidCallback? onThumbTap;
   final VoidCallback onFlip;
 
   @override

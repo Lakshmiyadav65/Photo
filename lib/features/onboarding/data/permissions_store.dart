@@ -3,9 +3,13 @@
 // come from the OS each time we check, so revocation through Settings is
 // detected on the next launch.
 
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/platform_info.dart';
 
 const _kCompletedKey = 'permissions_setup_completed';
 const _kOnboardedKey = 'onboarding_completed';
@@ -54,6 +58,21 @@ class PermissionsState {
 bool _isGrantedStatus(PermissionStatus s) =>
     s.isGranted || s.isLimited || s.isProvisional;
 
+/// The permission that actually gates gallery access on this device.
+///
+/// permission_handler's [Permission.photos] auto-reports *granted* on Android
+/// below 13 (there's no granular media permission there), which made the
+/// gallery card look granted before the user opted in — and indistinguishable
+/// from the camera grant. On those devices the real, promptable permission is
+/// [Permission.storage] (READ_EXTERNAL_STORAGE). Android 13+ and iOS use
+/// [Permission.photos]. A 0/unknown SDK falls back to photos (assume modern).
+Future<Permission> _galleryPermission() async {
+  if (!Platform.isAndroid) return Permission.photos;
+  final sdk = await PlatformInfo.androidSdkInt();
+  if (sdk == 0) return Permission.photos;
+  return sdk >= 33 ? Permission.photos : Permission.storage;
+}
+
 class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
   @override
   Future<PermissionsState> build() async {
@@ -61,7 +80,7 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
     final onboarded = prefs.getBool(_kOnboardedKey) ?? false;
     final completed = prefs.getBool(_kCompletedKey) ?? false;
     final cam = await Permission.camera.status;
-    final gal = await Permission.photos.status;
+    final gal = await (await _galleryPermission()).status;
     return PermissionsState(
       onboarded: onboarded,
       completed: completed,
@@ -87,7 +106,7 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
   }
 
   Future<bool> requestGallery() async {
-    final status = await Permission.photos.request();
+    final status = await (await _galleryPermission()).request();
     final granted = _isGrantedStatus(status);
     final current = state.value ??
         const PermissionsState(
@@ -104,7 +123,7 @@ class PermissionsNotifier extends AsyncNotifier<PermissionsState> {
   /// revocations made through device Settings.
   Future<void> refresh() async {
     final cam = await Permission.camera.status;
-    final gal = await Permission.photos.status;
+    final gal = await (await _galleryPermission()).status;
     final current = state.value ??
         const PermissionsState(
           onboarded: false,

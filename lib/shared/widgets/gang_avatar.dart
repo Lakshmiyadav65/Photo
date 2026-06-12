@@ -1,6 +1,9 @@
 // Circular avatar with a warm coral→amber gradient and the member's initial.
-// Used in the home header, member strips, and the profile screen. Falls back
-// to a generated gradient when there's no photo (v1 frontend uses initials).
+// Used in the home header, member strips, and the profile screen. Renders the
+// user's chosen photo when [imagePath] points at a real file, otherwise falls
+// back to the generated gradient + initial.
+
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -14,6 +17,7 @@ class GangAvatar extends StatelessWidget {
     this.gradient,
     this.borderColor,
     this.onTap,
+    this.imagePath,
   });
 
   final String name;
@@ -21,6 +25,11 @@ class GangAvatar extends StatelessWidget {
   final Gradient? gradient;
   final Color? borderColor;
   final VoidCallback? onTap;
+
+  /// Local path to the user's avatar photo. When set (and readable) it's shown
+  /// instead of the generated initials avatar; a missing/broken file falls back
+  /// gracefully to the gradient.
+  final String? imagePath;
 
   static const List<List<Color>> _palettes = [
     [AppTheme.coral, AppTheme.amber],
@@ -43,27 +52,53 @@ class GangAvatar extends StatelessWidget {
     );
   }
 
+  Widget _initialsAvatar() => Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          gradient: _gradient,
+          shape: BoxShape.circle,
+          border: borderColor != null
+              ? Border.all(color: borderColor!, width: 2)
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          _initial,
+          style: AppText.display(
+            fontSize: size * 0.4,
+            color: AppTheme.cream,
+          ),
+        ),
+      );
+
+  Widget _photoAvatar(String path) => Container(
+        width: size,
+        height: size,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: borderColor != null
+              ? Border.all(color: borderColor!, width: 2)
+              : null,
+        ),
+        child: Image.file(
+          File(path),
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          // A deleted/corrupt avatar file shouldn't crash the avatar — fall
+          // back to the generated initials.
+          errorBuilder: (_, _, _) => _initialsAvatar(),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final avatar = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: _gradient,
-        shape: BoxShape.circle,
-        border: borderColor != null
-            ? Border.all(color: borderColor!, width: 2)
-            : null,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        _initial,
-        style: AppText.display(
-          fontSize: size * 0.4,
-          color: AppTheme.cream,
-        ),
-      ),
-    );
+    final path = imagePath;
+    final avatar = (path != null && path.isNotEmpty)
+        ? _photoAvatar(path)
+        : _initialsAvatar();
     if (onTap == null) return avatar;
     return GestureDetector(onTap: onTap, child: avatar);
   }

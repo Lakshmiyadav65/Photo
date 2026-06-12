@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/constants.dart';
 import 'auth_repository.dart';
 
 /// Firebase-backed [AuthRepository]. Wired in `main.dart` once Firebase is
@@ -99,7 +100,11 @@ class FirebaseAuthRepository implements AuthRepository {
       // serverClientId to mint a Firebase-usable idToken, plus the app's
       // SHA-1 registered in Firebase. Verified after email/password.
       final signIn = GoogleSignIn.instance;
-      await signIn.initialize();
+      // serverClientId (the Web OAuth client) is REQUIRED on Android v7 — without
+      // it `authenticate()` returns a null idToken and Firebase sign-in fails.
+      await signIn.initialize(
+        serverClientId: AppConstants.googleServerClientId,
+      );
       final account = await signIn.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null) {

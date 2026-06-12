@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme.dart';
 import '../../../shared/widgets/brand.dart';
+import '../../../shared/widgets/google_g_logo.dart';
 import '../../../shared/widgets/labeled_field.dart';
 import '../../onboarding/data/permissions_store.dart';
 import '../data/auth_repository.dart';
@@ -195,7 +196,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       const SizedBox(height: 22),
                       LabeledField(
                         label: 'Password',
-                        hint: '••••••••',
+                        hint: 'Your password',
                         controller: _password,
                         obscureText: true,
                         onSubmitted: (_) => _submit(),
@@ -230,10 +231,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         ],
                       ),
                       const SizedBox(height: 24),
-                      OutlinedButton.icon(
+                      OutlinedButton(
                         onPressed: _busy ? null : _google,
-                        icon: const Icon(Icons.g_mobiledata_rounded, size: 26),
-                        label: const Text('Continue with Google'),
+                        // Manual centred row (not OutlinedButton.icon) so the
+                        // logo + label sit as one perfectly-centred group with
+                        // an even gap — the old g_mobiledata glyph rendered
+                        // off-centre inside its own wide bounding box.
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            GoogleGLogo(size: 18),
+                            SizedBox(width: 12),
+                            Text('Continue with Google'),
+                          ],
+                        ),
                       ),
                     ],
 

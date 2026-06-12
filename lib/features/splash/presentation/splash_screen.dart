@@ -51,10 +51,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     if (shortcutMoment != null) {
       // Skip the brand hold; go straight to the camera (which shows a
-      // permission fallback if camera access isn't granted).
-      final router = ref.read(appRouterProvider);
-      router.go('/home');
-      Future.microtask(() => router.push('/camera?moment=$shortcutMoment'));
+      // permission fallback if camera access isn't granted). `shortcut=1` makes
+      // the camera the standalone ROOT route (no /home underneath), so pressing
+      // back exits to the launcher instead of dropping the user into the app.
+      ref.read(appRouterProvider).go('/camera?moment=$shortcutMoment&shortcut=1');
       return;
     }
 

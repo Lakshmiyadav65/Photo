@@ -93,9 +93,22 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: _step == 0 ? _buildNicknameStep() : _buildNameStep(),
+        // Scrollable + min-height/IntrinsicHeight so the Spacer-based layout
+        // still fills the screen normally, but the content scrolls (instead of
+        // overflowing) once the keyboard shrinks the viewport.
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.sizeOf(context).height -
+                  MediaQuery.paddingOf(context).vertical,
+            ),
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: _step == 0 ? _buildNicknameStep() : _buildNameStep(),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -117,7 +130,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         const SizedBox(height: 44),
         LabeledField(
           label: 'Nickname',
-          hint: 'Lakshmi',
+          hint: 'Enter a nickname',
           controller: _nickname,
           textCapitalization: TextCapitalization.words,
           onSubmitted: (_) => _toNameStep(),

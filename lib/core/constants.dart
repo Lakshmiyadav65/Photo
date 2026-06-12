@@ -31,6 +31,14 @@ class AppConstants {
   static const String r2WorkerBaseUrl =
       'https://gangroll-r2-uploads.lakshmi-gangroll.workers.dev';
 
+  // Google Sign-In: the Web OAuth 2.0 client id (the `client_type: 3` entry in
+  // android/app/google-services.json). google_sign_in v7 only returns a
+  // Firebase-usable idToken when this is passed to `initialize()` as the
+  // `serverClientId`; without it the idToken is null and Google sign-in fails
+  // with "Something went wrong".
+  static const String googleServerClientId =
+      '975719145676-j6p11g14pm8lcid870m4b4fdpdg2pk0p.apps.googleusercontent.com';
+
   // Splash duration per spec App Flow doc.
   static const Duration splashDuration = Duration(milliseconds: 800);
 
